@@ -359,6 +359,15 @@ config COMMON_CLK_FIXED_MMIO
 	help
 	  Support for Memory Mapped IO Fixed clocks
 
+config CLK_K210
+	bool "Clock driver for the Canaan Kendryte K210 SoC"
+	depends on RISCV && SOC_CANAAN
+	depends on COMMON_CLK && OF
+	help
+	  Support for the Kendryte K210 RISC-V SoC clocks. This option
+	  is automatically selected when the SOC_KENDRYTE option is selected
+	  in the "SOC selection" menu.
+
 source "drivers/clk/actions/Kconfig"
 source "drivers/clk/analogbits/Kconfig"
 source "drivers/clk/baikal-t1/Kconfig"

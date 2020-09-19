@@ -1,0 +1,51 @@
+* Kendryte K210 Clock Controller
+
+The Kendryte K210 system controller subsystem generates and supplies clock to
+various controllers within the K210 SoC.
+
+Required Properties:
+
+- compatible: must be "kendryte,k210-sysclk"
+- #clock-cells: must be 1
+- clocks: node of the base external fixed-rate oscillator
+- clock-names: must be "in0"
+
+The K210 clock controller node must be defined as a child node of the SoC
+system controller ("kendryte,k210-sysctl" compatible). The register space for
+the clock controller is obtained from the system controller parent node.
+
+Each clock is assigned an identifier and client nodes use this identifier
+to specify the clock which they consume. All clock identifiers can be found
+in <dt-bindings/clock/k210-sysctl.h>.
+
+Example:
+
+	clocks {
+		in0: oscillator {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <26000000>;
+		};
+	};
+
+	soc {
+		...
+
+		sysctl: system-controller@50440000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "kendryte,k210-sysctl",
+			     	"syscon", "simple-mfd";
+			reg = <0x50440000 0x1000>;
+			...
+
+			sysclk: clock-controller {
+				#clock-cells = <1>;
+				compatible = "kendryte,k210-sysclk";
+				clocks = <&in0>;
+				clock-names ="in0";
+			};
+		};
+		...
+	};
+

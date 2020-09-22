@@ -29,6 +29,8 @@ config SOC_KENDRYTE
 	select SERIAL_SIFIVE if TTY
 	select SERIAL_SIFIVE_CONSOLE if TTY
 	select SIFIVE_PLIC
+	select PM
+	select SIMPLE_PM_BUS
 	help
 	  This enables support for Kendryte K210 SoC platform hardware.
 

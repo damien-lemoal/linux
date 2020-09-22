@@ -12,14 +12,18 @@
 #include <linux/bitfield.h>
 #include <asm/soc.h>
 
+#include <dt-bindings/clock/k210-sysclk.h>
+#include <dt-bindings/mfd/k210-sysctl.h>
+#include <dt-bindings/reset/k210-sysctl.h>
+
 #define K210_SYSCTL_CLK0_FREQ		26000000UL
 
 /* Registers base address */
 #define K210_SYSCTL_SYSCTL_BASE_ADDR	0x50440000ULL
 
-/* Registers */
-#define K210_SYSCTL_PLL0		0x08
-#define K210_SYSCTL_PLL1		0x0c
+/* Registers are defined in dt-bindings/mfd/k210-sysctl.h */
+
+/* K210_SYSCTL_PLL0, 1 and 2. */
 /* clkr: 4bits, clkf1: 6bits, clkod: 4bits, bwadj: 4bits */
 #define   PLL_RESET		(1 << 20)
 #define   PLL_PWR		(1 << 21)
@@ -28,7 +32,8 @@
 #define   PLL_TEST		(1 << 24)
 #define   PLL_OUT_EN		(1 << 25)
 #define   PLL_TEST_EN		(1 << 26)
-#define K210_SYSCTL_PLL_LOCK		0x18
+
+/* K210_SYSCTL_PLL_LOCK */
 #define   PLL0_LOCK1		(1 << 0)
 #define   PLL0_LOCK2		(1 << 1)
 #define   PLL0_SLIP_CLEAR	(1 << 2)
@@ -41,16 +46,19 @@
 #define   PLL2_LOCK2		(1 << 16)
 #define   PLL2_SLIP_CLEAR	(1 << 18)
 #define   PLL2_TEST_CLK_OUT	(1 << 19)
-#define K210_SYSCTL_CLKSEL0	0x20
+
+/* K210_SYSCTL_SEL0 */
 #define   CLKSEL_ACLK		(1 << 0)
-#define K210_SYSCTL_CLKEN_CENT		0x28
+
+/* K210_SYSCTL_EN_CENT */
 #define   CLKEN_CPU		(1 << 0)
 #define   CLKEN_SRAM0		(1 << 1)
 #define   CLKEN_SRAM1		(1 << 2)
 #define   CLKEN_APB0		(1 << 3)
 #define   CLKEN_APB1		(1 << 4)
 #define   CLKEN_APB2		(1 << 5)
-#define K210_SYSCTL_CLKEN_PERI		0x2c
+
+/* K210_SYSCTL_EN_PERI */
 #define   CLKEN_ROM		(1 << 0)
 #define   CLKEN_DMA		(1 << 1)
 #define   CLKEN_AI		(1 << 2)
@@ -140,7 +148,7 @@ static unsigned long k210_sysctl_clk_recalc_rate(struct clk_hw *hw,
 	 * If the clock selector is not set, use the base frequency.
 	 * Otherwise, use PLL0 frequency with a frequency divisor.
 	 */
-	clksel0 = readl(s->regs + K210_SYSCTL_CLKSEL0);
+	clksel0 = readl(s->regs + K210_SYSCTL_SEL0);
 	if (!(clksel0 & CLKSEL_ACLK))
 		return K210_SYSCTL_CLK0_FREQ;
 
@@ -237,11 +245,11 @@ static void __init k210_soc_early_init(const void *fdt)
 	k210_set_bits(PLL_OUT_EN, regs + K210_SYSCTL_PLL0);
 
 	k210_set_bits(CLKEN_CPU | CLKEN_SRAM0 | CLKEN_SRAM1,
-		      regs + K210_SYSCTL_CLKEN_CENT);
+		      regs + K210_SYSCTL_EN_CENT);
 	k210_set_bits(CLKEN_ROM | CLKEN_TIMER0 | CLKEN_RTC,
-		      regs + K210_SYSCTL_CLKEN_PERI);
+		      regs + K210_SYSCTL_EN_PERI);
 
-	k210_set_bits(CLKSEL_ACLK, regs + K210_SYSCTL_CLKSEL0);
+	k210_set_bits(CLKSEL_ACLK, regs + K210_SYSCTL_SEL0);
 
 	iounmap(regs);
 }

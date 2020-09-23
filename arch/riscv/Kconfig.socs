@@ -91,6 +91,47 @@ config SOC_KENDRYTE_K210_PINCTRL
 	  Add support for the Kendryte K210 Field Programmable IO Array (FPIOA)
 	  controller.  If you intend to use peripherals such as GPIO pins, i2c
 	  or spi (SD card), say Y here.
+
+config SOC_KENDRYTE_K210_REBOOT
+	bool "Enable reboot support for the Kendryte K210"
+	default n
+	select POWER_RESET
+	select POWER_RESET_SYSCON
+	help
+	  Add support for soft-rebooting Kendryte K210 based boards. This
+	  enables rebooting from the shell using the command "reboot -f".
+
+config SOC_KENDRYTE_K210_TIMER
+	bool "Enable timer support for the Kendryte K210"
+	default n
+	select DW_APB_TIMER
+	select DW_APB_TIMER_OF
+	help
+	  Enable support for the three additional clocksource timers
+	  available on the Kendryte K210 SoC. These are used only as
+	  clockevent sources. The CLINT is used as the sched clock.
+
+config SOC_KENDRYTE_K210_I2C
+	bool "Enable I2C support for the Kendryte K210"
+	default n
+	select I2C
+	select I2C_CHARDEV
+	select I2C_DESIGNWARE_PLATFORM
+	help
+	  Add support for the Kendryte K210 I2C ports.  If you intend to use
+	  I2C ports on your board, say Y here.
+
+config SOC_KENDRYTE_K210_GPIO
+	bool "Enable GPIO support for the Kendryte K210"
+	default n
+	select GPIOLIB
+	select GPIO_SYSFS
+	select GPIO_DWAPB
+	select GPIO_SIFIVE
+	help
+	  Add support for the Kendryte K210 GPIO controllers.  If you intend to use
+	  GPIO pins on your board, say Y here.
+
 endif
 
 endmenu

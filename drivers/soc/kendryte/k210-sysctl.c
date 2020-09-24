@@ -4,6 +4,7 @@
  * Copyright (c) 2019 Western Digital Corporation or its affiliates.
  */
 #include <linux/platform_device.h>
+#include <linux/of_platform.h>
 #include <linux/io.h>
 #include <asm/soc.h>
 
@@ -12,8 +13,16 @@
 static int k210_sysctl_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	dev_info(dev, "Kendryte K210 SoC system controller\n");
+
+	/* Populate children (reset and reboot) */
+	ret = devm_of_platform_populate(dev);
+	if (ret) {
+		dev_err(dev, "platform populate failed %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }

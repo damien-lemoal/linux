@@ -69,6 +69,15 @@ config SOC_KENDRYTE_K210_RESET
 	  Add support for the Kendryte K210 SoC reset controller. Boards
 	  seem to operate fine without this enabled.
 
+config SOC_KENDRYTE_K210_REBOOT
+	bool "Enable reboot support for the Kendryte K210"
+	default n
+	select POWER_RESET
+	select POWER_RESET_SYSCON
+	help
+	  Add support for soft-rebooting Kendryte K210 based boards. This
+	  enables rebooting from the shell using the command "reboot -f".
+
 endif
 
 endmenu

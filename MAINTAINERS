@@ -3835,6 +3835,8 @@ F:	drivers/clk/clk-k210.c
 F:	Documentation/devicetree/bindings/clock/canaan,k210-clk.yaml
 F:	drivers/pinctrl/pinctrl-k210.c
 F:	Documentation/devicetree/bindings/pinctrl/canaan,k210-fpioa.yaml
+F:	drivers/reset/reset-k210.c
+F:	Documentation/devicetree/bindings/reset/canaan,k210-rst.yaml
 
 CACHEFILES: FS-CACHE BACKEND FOR CACHING ON MOUNTED FILESYSTEMS
 M:	David Howells <dhowells@redhat.com>

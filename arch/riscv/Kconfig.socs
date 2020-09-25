@@ -61,6 +61,14 @@ config SOC_KENDRYTE_K210_DTB_SOURCE
 	  for the DTS file that will be used to produce the DTB linked into the
 	  kernel.
 
+config SOC_KENDRYTE_K210_RESET
+	bool "Enable device reset controller for the Kendryte K210"
+	default n
+	select RESET_CONTROLLER
+	help
+	  Add support for the Kendryte K210 SoC reset controller. Boards
+	  seem to operate fine without this enabled.
+
 endif
 
 endmenu

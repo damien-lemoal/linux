@@ -233,6 +233,13 @@ config RESET_ZYNQ
 	help
 	  This enables the reset controller driver for Xilinx Zynq SoCs.
 
+config RESET_K210
+	bool "Reset controller driver for Kendryte K210 SoC"
+	depends on RISCV && SOC_KENDRYTE
+	depends on OF && MFD_SYSCON
+	help
+	  Support for reset controllers on the Kendryte K210 SoC.
+
 source "drivers/reset/sti/Kconfig"
 source "drivers/reset/hisilicon/Kconfig"
 source "drivers/reset/tegra/Kconfig"

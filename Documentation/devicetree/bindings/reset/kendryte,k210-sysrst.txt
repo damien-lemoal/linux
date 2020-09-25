@@ -1,0 +1,32 @@
+Kendryte K210 Reset controller
+==============================
+
+Please also refer to reset.txt in this directory for common reset
+controller binding usage.
+
+Required properties:
+
+- compatible: should be "kendryte,k210-sysrst"
+
+- reg: physical base address of the reset controller and length of memory
+       mapped region (4B).
+
+- #reset-cells: must be 1.
+
+example:
+
+	sysctl: system-controller@50440000 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "kendryte,k210-sysctl",
+			     "syscon", "simple-mfd";
+		reg = <0x50440000 0x1000>;
+        	ranges = <0 0x50440000 0x1000>;
+		...
+
+		sysrst: reset-controller {
+			compatible = "kendryte,k210-sysrst";
+			reg = <K210_SYSCTL_PERI_RESET 0x4>;
+			#reset-cells = <1>;
+		};
+	};

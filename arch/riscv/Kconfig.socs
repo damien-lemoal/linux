@@ -31,6 +31,9 @@ config SOC_KENDRYTE
 	select SIFIVE_PLIC
 	select SOC_K210
 	select CLK_K210
+	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
+	select RESET_K210
 	help
 	  This enables support for Kendryte K210 SoC platform hardware.
 

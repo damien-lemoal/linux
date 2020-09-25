@@ -69,6 +69,17 @@ config SOC_KENDRYTE_K210_CLK_DEBUG
 	  by adding the boolean property "debug;" to the sysclk node of the
 	  Kendryte K210 device tree (arch/riscv/boot/dts/kendryte/k210.dtsi).
 
+config SOC_KENDRYTE_K210_RESET
+	bool "Enable reset signals controller for the Kendryte K210"
+	default n
+	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
+	select RESET_KENDRYTE_K210
+	help
+	  This enables the reset controller driver for Kendryte K210 SoC.
+          Say Y if you are using such SoC and want to control the reset
+          signals provided by reset controller. Otherwise, say N.
+
 endif
 
 endmenu

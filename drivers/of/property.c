@@ -1308,7 +1308,6 @@ DEFINE_SIMPLE_PROP(pinctrl7, "pinctrl-7", NULL)
 DEFINE_SIMPLE_PROP(pinctrl8, "pinctrl-8", NULL)
 DEFINE_SUFFIX_PROP(regulators, "-supply", NULL)
 DEFINE_SUFFIX_PROP(gpio, "-gpio", "#gpio-cells")
-DEFINE_SUFFIX_PROP(gpios, "-gpios", "#gpio-cells")
 
 static struct device_node *parse_iommu_maps(struct device_node *np,
 					    const char *prop_name, int index)
@@ -1317,6 +1316,25 @@ static struct device_node *parse_iommu_maps(struct device_node *np,
 		return NULL;
 
 	return of_parse_phandle(np, prop_name, (index * 4) + 1);
+}
+
+static struct device_node *parse_gpios(struct device_node *np,
+				       const char *prop_name, int index)
+{
+	/*
+	 * Quirk for the deprecated "snps,nr-gpios" property of the
+	 * DesignWare gpio-dwapb GPIO driver: as this property parsing
+	 * conflicts with the "xx-gpios" phandle reference property,
+	 * issue a warning and ignore it.
+	 */
+	if (strcmp(prop_name, "snps,nr-gpios") == 0) {
+		pr_warn("%pOF: \"snps,nr-gpios\" property is deprecated in favor of \"ngpios\"\n",
+			np);
+		return NULL;
+	}
+
+	return parse_suffix_prop_cells(np, prop_name, index,
+				       "-gpios", "#gpio-cells");
 }
 
 static const struct supplier_bindings of_supplier_bindings[] = {

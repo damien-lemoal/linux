@@ -3830,6 +3830,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/clock/canaan,k210-clk.yaml
 F:	drivers/clk/clk-k210.c
 
+CANAAN/KENDRYTE K210 SOC FPIOA DRIVER
+M:	Damien Le Moal <damien.lemoal@wdc.com>
+L:	linux-riscv@lists.infradead.org
+L:	linux-gpio@vger.kernel.org (pinctrl driver)
+F:	Documentation/devicetree/bindings/pinctrl/canaan,k210-fpioa.yaml
+F:	drivers/pinctrl/pinctrl-k210.c
+
 CANAAN/KENDRYTE K210 SOC SYSTEM CONTROLLER DRIVER
 M:	Damien Le Moal <damien.lemoal@wdc.com>
 L:	linux-riscv@lists.infradead.org

@@ -404,6 +404,17 @@ config PINCTRL_OCELOT
 	select OF_GPIO
 	select REGMAP_MMIO
 
+config PINCTRL_K210
+	bool "Pinctrl driver for the Kendryte K210 SoC"
+	depends on RISCV && SOC_KENDRYTE
+	depends on OF && HAS_IOMEM
+	select PINMUX
+	select GENERIC_PINCONF
+	select GPIOLIB
+	select GPIOLIB_IRQCHIP
+	select OF_GPIO
+	select REGMAP_MMIO
+
 source "drivers/pinctrl/actions/Kconfig"
 source "drivers/pinctrl/aspeed/Kconfig"
 source "drivers/pinctrl/bcm/Kconfig"

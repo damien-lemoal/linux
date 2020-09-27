@@ -80,6 +80,17 @@ config SOC_KENDRYTE_K210_RESET
           Say Y if you are using such SoC and want to control the reset
           signals provided by reset controller. Otherwise, say N.
 
+config SOC_KENDRYTE_K210_PINCTRL
+	bool "Enable pin controller support for the Kendryte K210"
+	default n
+	select PINCTRL
+	select PINMUX
+	select PINCONF
+	select GENERIC_PINCONF
+	help
+	  Add support for the Kendryte K210 Field Programmable IO Array (FPIOA)
+	  controller.  If you intend to use peripherals such as GPIO pins, i2c
+	  or spi (SD card), say Y here.
 endif
 
 endmenu

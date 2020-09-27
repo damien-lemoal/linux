@@ -2,3 +2,4 @@
 
 obj-$(CONFIG_SOC_KENDRYTE)	+= k210-clk.o k210-sysctl.o
 obj-$(CONFIG_SOC_KENDRYTE_K210_RESET)	+= k210-rst.o
+obj-$(CONFIG_SOC_KENDRYTE_K210_PINCTRL)	+= k210-fpioa.o

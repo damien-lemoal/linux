@@ -6,6 +6,7 @@
 #include <dt-bindings/clock/k210-sysclk.h>
 #include <dt-bindings/mfd/k210-sysctl.h>
 #include <dt-bindings/reset/k210-sysctl.h>
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	/*
@@ -186,7 +187,6 @@
 					   0x200000 0x200000 0x200000>;
 			snps,priority = <0 1 2 3 4 5>;
 			snps,axi-max-burst-len = <256>;
-			status = "disabled";
 		};
 
 		apb0: bus@50200000 {
@@ -286,7 +286,6 @@
 				clocks = <&sysclk K210_CLK_I2S0>;
 				clock-names = "i2sclk";
 				resets = <&sysrst K210_RST_I2S0>;
-				status = "disabled";
 			};
 
 			apu0: sound@520250200 {
@@ -303,7 +302,6 @@
 				clocks = <&sysclk K210_CLK_I2S1>;
 				clock-names = "i2sclk";
 				resets = <&sysrst K210_RST_I2S1>;
-				status = "disabled";
 			};
 
 			i2s2: i2s@50270000 {
@@ -335,7 +333,6 @@
 				interrupts = <9>;
 				clocks = <&sysclk K210_CLK_I2C1>;
 				resets = <&sysrst K210_RST_I2C1>;
-				status = "disabled";
 			};
 
 			i2c2: i2c@502A0000 {
@@ -345,7 +342,6 @@
 				interrupts = <10>;
 				clocks = <&sysclk K210_CLK_I2C2>;
 				resets = <&sysrst K210_RST_I2C2>;
-				status = "disabled";
 			};
 
 			fpioa: pinmux@502B0000 {
@@ -353,7 +349,6 @@
 				reg = <0x502B0000 0x100>;
 				clocks = <&sysclk K210_CLK_FPIOA>;
 				resets = <&sysrst K210_RST_FPIOA>;
-				status = "disabled";
 			};
 
 			sha256: sha256@502C0000 {
@@ -532,13 +527,23 @@
 					     "snps,dw-apb-ssi";
 				reg = <0x52000000 0x100>;
 				interrupts = <1>;
-				clocks = <&sysclk K210_CLK_SPI0>;
-				clock-names = "ssi_clk";
+				clocks = <&sysclk K210_CLK_SPI0>,
+					 <&sysclk K210_CLK_APB2>;
+				clock-names = "ssi_clk", "pclk";
 				resets = <&sysrst K210_RST_SPI0>;
-				spi-max-frequency = <25000000>;
+				reset-names = "spi";
+				spi-max-frequency = <200000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
-				status = "disabled";
+				cs-gpios = <&gpio0 7 0x10>;
+
+				sdcard0: sdcard@0 {
+					compatible = "mmc-spi-slot";
+					reg = <0>;
+					spi-max-frequency = <200000>;
+					voltage-ranges = <3200 3400>;
+					broken_cd;
+        			};
 			};
 
 			spi1: spi@53000000 {
@@ -554,7 +559,6 @@
 				spi-max-frequency = <25000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
-				status = "disabled";
 			};
 
 			spi3: spi@54000000 {
@@ -571,7 +575,6 @@
 				spi-max-frequency = <100000000>;
 				num-cs = <4>;
 				reg-io-width = <4>;
-				status = "disabled";
 			};
 		};
 	};

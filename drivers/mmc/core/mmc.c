@@ -2218,8 +2218,10 @@ int mmc_attach_mmc(struct mmc_host *host)
 		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
 
 	err = mmc_send_op_cond(host, 0, &ocr);
-	if (err)
+	if (err) {
+		pr_info("## mmc_send_op_cond err %d\n", err);
 		return err;
+	}
 
 	mmc_attach_bus(host, &mmc_ops);
 	if (host->ocr_avail_mmc)
@@ -2230,8 +2232,10 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 */
 	if (mmc_host_is_spi(host)) {
 		err = mmc_spi_read_ocr(host, 1, &ocr);
-		if (err)
+		if (err) {
+			pr_info("## read ocr err %d\n", err);
 			goto err;
+		}
 	}
 
 	rocr = mmc_select_voltage(host, ocr);
@@ -2241,6 +2245,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 */
 	if (!rocr) {
 		err = -EINVAL;
+		pr_info("## select voltage err %d\n", err);
 		goto err;
 	}
 
@@ -2248,13 +2253,17 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 * Detect and init the card.
 	 */
 	err = mmc_init_card(host, rocr, NULL);
-	if (err)
+	if (err) {
+		pr_info("## init card err %d\n", err);
 		goto err;
+	}
 
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);
-	if (err)
+	if (err) {
+		pr_info("## add card err %d\n", err);
 		goto remove_card;
+	}
 
 	mmc_claim_host(host);
 	return 0;

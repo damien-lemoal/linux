@@ -46,6 +46,7 @@ static void k210_sysrst_update(struct reset_controller_dev *rcdev,
 static int k210_sysrst_assert(struct reset_controller_dev *rcdev,
 			      unsigned long id)
 {
+	pr_info("sysrst: assert %lu\n", id);
 	k210_sysrst_update(rcdev, id, true);
 
 	return 0;
@@ -54,6 +55,7 @@ static int k210_sysrst_assert(struct reset_controller_dev *rcdev,
 static int k210_sysrst_deassert(struct reset_controller_dev *rcdev,
 				unsigned long id)
 {
+	pr_info("sysrst: deassert %lu\n", id);
 	k210_sysrst_update(rcdev, id, false);
 
 	return 0;
@@ -62,6 +64,7 @@ static int k210_sysrst_deassert(struct reset_controller_dev *rcdev,
 static int k210_sysrst_reset(struct reset_controller_dev *rcdev,
 			     unsigned long id)
 {
+	pr_info("sysrst: reset %lu\n", id);
 	k210_sysrst_assert(rcdev, id);
 	udelay(10);
 	k210_sysrst_deassert(rcdev, id);

@@ -179,8 +179,10 @@ int mmc_send_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 
 	for (i = 100; i; i--) {
 		err = mmc_wait_for_cmd(host, &cmd, 0);
-		if (err)
+		if (err) {
+			pr_info("## wait for cmd err %d\n", err);
 			break;
+		}
 
 		/* wait until reset completes */
 		if (mmc_host_is_spi(host)) {
@@ -205,6 +207,8 @@ int mmc_send_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 		if (!ocr && !mmc_host_is_spi(host))
 			cmd.arg = cmd.resp[0] | BIT(30);
 	}
+	if (!i)
+		pr_info("## all retries failed\n");
 
 	if (rocr && !mmc_host_is_spi(host))
 		*rocr = cmd.resp[0];

@@ -195,44 +195,60 @@ static int dw_spi_mmio_probe(struct platform_device *pdev)
 	int ret;
 	int num_cs;
 
+	dev_info(&pdev->dev, "SPI MMIO probe\n");
+
 	dwsmmio = devm_kzalloc(&pdev->dev, sizeof(struct dw_spi_mmio),
 			GFP_KERNEL);
-	if (!dwsmmio)
+	if (!dwsmmio) {
+		dev_err(&pdev->dev, "Alloc dwsmmio failed\n");
 		return -ENOMEM;
+	}
 
 	dws = &dwsmmio->dws;
 
 	/* Get basic io resource and map it */
 	dws->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &mem);
-	if (IS_ERR(dws->regs))
+	if (IS_ERR(dws->regs)) {
+		dev_err(&pdev->dev, "Get resource\n");
 		return PTR_ERR(dws->regs);
+	}
 
 	dws->paddr = mem->start;
 
 	dws->irq = platform_get_irq(pdev, 0);
-	if (dws->irq < 0)
+	if (dws->irq < 0) {
+		dev_err(&pdev->dev, "Get irq\n");
 		return dws->irq; /* -ENXIO */
+	}
 
 	dwsmmio->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(dwsmmio->clk))
+	if (IS_ERR(dwsmmio->clk)) {
+		dev_err(&pdev->dev, "Get clk\n");
 		return PTR_ERR(dwsmmio->clk);
+	}
 	ret = clk_prepare_enable(dwsmmio->clk);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "clk prepare enable\n");
 		return ret;
+	}
 
 	/* Optional clock needed to access the registers */
 	dwsmmio->pclk = devm_clk_get_optional(&pdev->dev, "pclk");
 	if (IS_ERR(dwsmmio->pclk)) {
+		dev_err(&pdev->dev, "get pclk\n");
 		ret = PTR_ERR(dwsmmio->pclk);
 		goto out_clk;
 	}
 	ret = clk_prepare_enable(dwsmmio->pclk);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "pclk prepare enable\n");
 		goto out_clk;
+	}
 
 	/* find an optional reset controller */
 	dwsmmio->rstc = devm_reset_control_get_optional_exclusive(&pdev->dev, "spi");
 	if (IS_ERR(dwsmmio->rstc)) {
+		dev_err(&pdev->dev, "get rstc\n");
 		ret = PTR_ERR(dwsmmio->rstc);
 		goto out_clk;
 	}
@@ -253,17 +269,24 @@ static int dw_spi_mmio_probe(struct platform_device *pdev)
 	init_func = device_get_match_data(&pdev->dev);
 	if (init_func) {
 		ret = init_func(pdev, dwsmmio);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "init func\n");
 			goto out;
+		}
 	}
 
 	pm_runtime_enable(&pdev->dev);
 
 	ret = dw_spi_add_host(&pdev->dev, dws);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "add host\n");
 		goto out;
+	}
 
 	platform_set_drvdata(pdev, dwsmmio);
+
+	dev_info(&pdev->dev, "SPI MMIO probe done\n");
+
 	return 0;
 
 out:

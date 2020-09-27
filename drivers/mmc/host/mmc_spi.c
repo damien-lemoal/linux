@@ -398,7 +398,7 @@ checkstatus:
 		break;
 
 	default:
-		dev_dbg(&host->spi->dev, "bad response type %04x\n",
+		dev_info(&host->spi->dev, "bad response type %04x\n",
 			mmc_spi_resp_type(cmd));
 		if (value >= 0)
 			value = -EINVAL;
@@ -406,7 +406,7 @@ checkstatus:
 	}
 
 	if (value < 0)
-		dev_dbg(&host->spi->dev, "%s: resp %04x %08x\n",
+		dev_info(&host->spi->dev, "%s: resp %04x %08x\n",
 			tag, cmd->resp[0], cmd->resp[1]);
 
 	/* disable chipselect on errors and some success cases */
@@ -504,7 +504,7 @@ mmc_spi_command_send(struct mmc_spi_host *host,
 		/* else:  R1 (most commands) */
 	}
 
-	dev_dbg(&host->spi->dev, "  mmc_spi: CMD%d, resp %s\n",
+	dev_info(&host->spi->dev, "  mmc_spi: CMD%d, resp %s\n",
 		cmd->opcode, maptype(cmd));
 
 	/* send command, leaving chipselect active */
@@ -531,7 +531,7 @@ mmc_spi_command_send(struct mmc_spi_host *host,
 				host->data_dma, sizeof(*host->data),
 				DMA_BIDIRECTIONAL);
 	if (status < 0) {
-		dev_dbg(&host->spi->dev, "  ... write returned %d\n", status);
+		dev_info(&host->spi->dev, "  ... write returned %d\n", status);
 		cmd->error = status;
 		return status;
 	}
@@ -668,7 +668,7 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
 	status = spi_sync_locked(spi, &host->m);
 
 	if (status != 0) {
-		dev_dbg(&spi->dev, "write error (%d)\n", status);
+		dev_info(&spi->dev, "write error (%d)\n", status);
 		return status;
 	}
 
@@ -719,7 +719,7 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
 		break;
 	}
 	if (status != 0) {
-		dev_dbg(&spi->dev, "write error %02x (%d)\n",
+		dev_info(&spi->dev, "write error %02x (%d)\n",
 			scratch->status[0], status);
 		return status;
 	}
@@ -776,7 +776,7 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 		status = mmc_spi_readtoken(host, timeout);
 
 	if (status < 0) {
-		dev_dbg(&spi->dev, "read error %02x (%d)\n", status, status);
+		dev_info(&spi->dev, "read error %02x (%d)\n", status, status);
 		return status;
 	}
 
@@ -801,7 +801,7 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 
 	status = spi_sync_locked(spi, &host->m);
 	if (status < 0) {
-		dev_dbg(&spi->dev, "read error %d\n", status);
+		dev_info(&spi->dev, "read error %d\n", status);
 		return status;
 	}
 
@@ -840,7 +840,7 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 
 		be16_to_cpus(&scratch->crc_val);
 		if (scratch->crc_val != crc) {
-			dev_dbg(&spi->dev,
+			dev_info(&spi->dev,
 				"read - crc error: crc_val=0x%04x, computed=0x%04x len=%d\n",
 				scratch->crc_val, crc, t->len);
 			return -EILSEQ;
@@ -928,7 +928,7 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 		while (length) {
 			t->len = min(length, blk_size);
 
-			dev_dbg(&host->spi->dev,
+			dev_info(&host->spi->dev,
 				"    mmc_spi: %s block, %d bytes\n",
 				(direction == DMA_TO_DEVICE) ? "write" : "read",
 				t->len);
@@ -956,7 +956,7 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 
 		if (status < 0) {
 			data->error = status;
-			dev_dbg(&spi->dev, "%s status %d\n",
+			dev_info(&spi->dev, "%s status %d\n",
 				(direction == DMA_TO_DEVICE) ? "write" : "read",
 				status);
 			break;
@@ -974,7 +974,7 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 		int		tmp;
 		const unsigned	statlen = sizeof(scratch->status);
 
-		dev_dbg(&spi->dev, "    mmc_spi: STOP_TRAN\n");
+		dev_info(&spi->dev, "    mmc_spi: STOP_TRAN\n");
 
 		/* Tweak the per-block message we set up earlier by morphing
 		 * it to hold single buffer with the token followed by some
@@ -1045,14 +1045,14 @@ static void mmc_spi_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 		cmd = mrq->cmd;
 		if (!mmc_spi_resp_type(cmd)) {
-			dev_dbg(&host->spi->dev, "bogus command\n");
+			dev_info(&host->spi->dev, "bogus command\n");
 			cmd->error = -EINVAL;
 			invalid = 1;
 		}
 
 		cmd = mrq->stop;
 		if (cmd && !mmc_spi_resp_type(cmd)) {
-			dev_dbg(&host->spi->dev, "bogus STOP command\n");
+			dev_info(&host->spi->dev, "bogus STOP command\n");
 			cmd->error = -EINVAL;
 			invalid = 1;
 		}
@@ -1175,7 +1175,7 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 		canpower = host->pdata && host->pdata->setpower;
 
-		dev_dbg(&host->spi->dev, "mmc_spi: power %s (%d)%s\n",
+		dev_info(&host->spi->dev, "mmc_spi: power %s (%d)%s\n",
 				mmc_powerstring(ios->power_mode),
 				ios->vdd,
 				canpower ? ", can switch" : "");
@@ -1207,18 +1207,19 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		 *   - MOSI low comes from writing zero
 		 *   - Chipselect is usually active low...
 		 */
-		if (canpower && ios->power_mode == MMC_POWER_OFF) {
+		//if (canpower && ios->power_mode == MMC_POWER_OFF) {
+		{
 			int mres;
 			u8 nullbyte = 0;
 
 			host->spi->mode &= ~(SPI_CPOL|SPI_CPHA);
 			mres = spi_setup(host->spi);
 			if (mres < 0)
-				dev_dbg(&host->spi->dev,
+				dev_info(&host->spi->dev,
 					"switch to SPI mode 0 failed\n");
 
 			if (spi_write(host->spi, &nullbyte, 1) < 0)
-				dev_dbg(&host->spi->dev,
+				dev_info(&host->spi->dev,
 					"put spi signals to low failed\n");
 
 			/*
@@ -1235,7 +1236,7 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				host->spi->mode |= (SPI_CPOL|SPI_CPHA);
 				mres = spi_setup(host->spi);
 				if (mres < 0)
-					dev_dbg(&host->spi->dev,
+					dev_info(&host->spi->dev,
 						"switch back to SPI mode 3 failed\n");
 			}
 		}
@@ -1248,7 +1249,7 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 		host->spi->max_speed_hz = ios->clock;
 		status = spi_setup(host->spi);
-		dev_dbg(&host->spi->dev,
+		dev_info(&host->spi->dev,
 			"mmc_spi:  clock to %d Hz, %d\n",
 			host->spi->max_speed_hz, status);
 	}
@@ -1350,7 +1351,7 @@ static int mmc_spi_probe(struct spi_device *spi)
 
 	status = spi_setup(spi);
 	if (status < 0) {
-		dev_dbg(&spi->dev, "needs SPI mode %02x, %d KHz; %d\n",
+		dev_info(&spi->dev, "needs SPI mode %02x, %d KHz; %d\n",
 				spi->mode, spi->max_speed_hz / 1000,
 				status);
 		return status;

@@ -61,6 +61,14 @@ config SOC_KENDRYTE_K210_DTB_SOURCE
 	  for the DTS file that will be used to produce the DTB linked into the
 	  kernel.
 
+config SOC_KENDRYTE_K210_CLK_DEBUG
+	bool "Enable clock information debug print for the Kendryte K210"
+	default n
+	help
+	  Enable clock information debug print on boot. Prints are enabled
+	  by adding the boolean property "debug;" to the sysclk node of the
+	  Kendryte K210 device tree (arch/riscv/boot/dts/kendryte/k210.dtsi).
+
 endif
 
 endmenu

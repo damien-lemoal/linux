@@ -938,3 +938,126 @@ void k210_clk_early_init(void __iomem *regs)
 	k210_init_pll(&pll1, K210_PLL1, regs);
 	k210_pll_enable_hw(&pll1);
 }
+
+#ifdef CONFIG_SOC_KENDRYTE_K210_CLK_DEBUG
+
+static void k210_clk_show_clk(int id, int level, char *str, bool *shown)
+{
+	struct clk_hw *hw = kcl->clk_data->hws[id];
+
+	if (level == 0)
+		pr_info("(%d) %s : %lu Hz (%d)\n",
+			id, clk_hw_get_name(hw), clk_hw_get_rate(hw),
+			__clk_get_enable_count(hw->clk));
+	else
+		pr_info("%s+-- (%d) %s : %lu Hz (%d)\n",
+			str, id, clk_hw_get_name(hw), clk_hw_get_rate(hw),
+			__clk_get_enable_count(hw->clk));
+
+	shown[id] = true;
+}
+
+static void k210_clk_dump_clk(struct clk_hw *parent, int level, char *str,
+			      bool *shown)
+{
+	struct clk_hw *hw, *h;
+	bool has_prev, has_next;
+	int i, j;
+
+	for (i = 0; i < kcl->clk_data->num; i++) {
+		hw = kcl->clk_data->hws[i];
+
+		if (!hw || parent == hw || shown[i])
+			continue;
+
+		if (clk_hw_get_parent(hw) != parent)
+			continue;
+
+		k210_clk_show_clk(i, level, str, shown);
+
+		has_prev = false;
+		for (j = i - 1; j >= 0; j--) {
+			h = kcl->clk_data->hws[j];
+			if (clk_hw_get_parent(h) == parent) {
+				has_prev = true;
+				break;
+			}
+		}
+
+		has_next = false;
+		for (j = i + 1; j < kcl->clk_data->num; j++) {
+			h = kcl->clk_data->hws[j];
+			if (clk_hw_get_parent(h) == parent) {
+				has_next = true;
+				break;
+			}
+		}
+
+		if (level > 0) {
+			if (has_next || has_prev)
+				strcat(str, "|    ");
+			else
+				strcat(str, "     ");
+		}
+
+		k210_clk_dump_clk(hw, level + 1, str, shown);
+
+		if (level > 0)
+			str[strlen(str) - 5] = '\0';
+	}
+}
+
+static void k210_clk_dump_info(void)
+{
+	static bool shown[K210_NUM_CLKS];
+	char str[64];
+	int i;
+
+	pr_info("-------------------------------------\n");
+
+	memset(shown, 0, sizeof(shown));
+	memset(str, 0, sizeof(str));
+
+	pr_info("PLLs factors:\n");
+	for (i = 0; i < K210_PLL_NUM; i++)
+		pr_info("    PLL%d: r = %u, f = %u, od = %u, bwadj = %u\n",
+			i, k210_plls_cfg[i].r,
+			k210_plls_cfg[i].f,
+			k210_plls_cfg[i].od,
+			k210_plls_cfg[i].bwadj);
+
+	pr_info("K210 clock tree:\n");
+	k210_clk_show_clk(K210_CLK_IN0, 0, str, shown);
+	strcat(str, " ");
+	k210_clk_dump_clk(kcl->clk_data->hws[K210_CLK_IN0], 1, str, shown);
+
+	pr_info("-------------------------------------\n");
+}
+
+static int k210_clk_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+
+	dev_info(dev, "K210 clock driver\n");
+
+	if (of_property_read_bool(dev->of_node, "debug"))
+		k210_clk_dump_info();
+
+	return 0;
+}
+
+static const struct of_device_id k210_clk_of_match[] = {
+	{ .compatible = "kendryte,k210-clk", },
+	{}
+};
+
+static struct platform_driver k210_clk_driver = {
+	.driver	= {
+		.name		= "k210-clk",
+		.of_match_table	= k210_clk_of_match,
+	},
+	.probe			= k210_clk_probe,
+};
+builtin_platform_driver(k210_clk_driver);
+
+#endif

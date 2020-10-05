@@ -629,6 +629,10 @@ static int sifive_serial_clk_notifier(struct notifier_block *nb,
 	struct clk_notifier_data *cnd = data;
 	struct sifive_serial_port *ssp = notifier_to_sifive_serial_port(nb);
 
+	pr_info("#### sifive_serial_clk_notifier %lu, %lu / %lu\n",
+		ssp->baud_rate,
+		ssp->clkin_rate,
+		cnd->new_rate);
 	if (event == PRE_RATE_CHANGE) {
 		/*
 		 * The TX watermark is always set to 1 by this driver, which
@@ -934,6 +938,8 @@ static struct uart_driver sifive_serial_uart_driver = {
 	.cons		= SIFIVE_SERIAL_CONSOLE,
 };
 
+#include <linux/clk-provider.h>
+
 static int sifive_serial_probe(struct platform_device *pdev)
 {
 	struct sifive_serial_port *ssp;
@@ -999,6 +1005,7 @@ static int sifive_serial_probe(struct platform_device *pdev)
 	/* Set up clock divider */
 	ssp->clkin_rate = clk_get_rate(ssp->clk);
 	ssp->baud_rate = SIFIVE_DEFAULT_BAUD_RATE;
+	ssp->port.uartclk = ssp->baud_rate * 16;
 	__ssp_update_div(ssp);
 
 	platform_set_drvdata(pdev, ssp);

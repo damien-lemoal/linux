@@ -1445,7 +1445,12 @@ static int mmc_spi_probe(struct spi_device *spi)
 	/* pass platform capabilities, if any */
 	if (host->pdata) {
 		mmc->caps |= host->pdata->caps;
-		mmc->caps2 |= host->pdata->caps2;
+		/* mmc->caps |= MMC_CAP_NEED_RSP_BUSY; */
+                mmc->caps2 |= host->pdata->caps2;
+		mmc->caps2 |= MMC_CAP2_NO_SD;
+		mmc->caps2 |= MMC_CAP2_NO_SDIO;
+		mmc->caps2 |= MMC_CAP2_NO_WRITE_PROTECT;
+		mmc->caps2 |= MMC_CAP2_NO_MMC;
 	}
 
 	status = mmc_add_host(mmc);

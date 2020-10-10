@@ -311,8 +311,12 @@ void dw_spi_update_config(struct dw_spi *dws, struct spi_device *spi,
 	u32 speed_hz;
 	u16 clk_div;
 
-	/* CTRLR0[ 4/3: 0] Data Frame Size */
-	cr0 |= (cfg->dfs - 1);
+	if (!(dws->caps & DW_SPI_CAP_DFS_32))
+		/* CTRLR0[ 4/3: 0] Data Frame Size */
+		cr0 |= (cfg->dfs - 1);
+	else
+		/* CTRLR0[20: 16] Data Frame Size */
+		cr0 |= (cfg->dfs - 1) << DWC_APB_CTRLR0_32_DFS_OFFSET;
 
 	if (!(dws->caps & DW_SPI_CAP_DWC_SSI))
 		/* CTRLR0[ 9:8] Transfer Mode */

@@ -137,14 +137,16 @@ static inline u32 rx_max(struct dw_spi *dws)
 static void dw_writer(struct dw_spi *dws)
 {
 	u32 max = tx_max(dws);
-	u16 txw = 0;
+	u32 txw = 0;
 
 	while (max--) {
 		if (dws->tx) {
 			if (dws->n_bytes == 1)
 				txw = *(u8 *)(dws->tx);
-			else
+			else if (dws->n_bytes == 2)
 				txw = *(u16 *)(dws->tx);
+			else
+				txw = *(u32 *)(dws->tx);
 
 			dws->tx += dws->n_bytes;
 		}
@@ -156,15 +158,17 @@ static void dw_writer(struct dw_spi *dws)
 static void dw_reader(struct dw_spi *dws)
 {
 	u32 max = rx_max(dws);
-	u16 rxw;
+	u32 rxw;
 
 	while (max--) {
 		rxw = dw_read_io_reg(dws, DW_SPI_DR);
 		if (dws->rx) {
 			if (dws->n_bytes == 1)
 				*(u8 *)(dws->rx) = rxw;
-			else
+			else if (dws->n_bytes == 2)
 				*(u16 *)(dws->rx) = rxw;
+			else
+				*(u32 *)(dws->rx) = rxw;
 
 			dws->rx += dws->n_bytes;
 		}
@@ -311,8 +315,12 @@ void dw_spi_update_config(struct dw_spi *dws, struct spi_device *spi,
 	u32 speed_hz;
 	u16 clk_div;
 
-	/* CTRLR0[ 4/3: 0] Data Frame Size */
-	cr0 |= (cfg->dfs - 1);
+	if (!(dws->caps & DW_SPI_CAP_DWC_APB_XFER32))
+		/* CTRLR0[ 4/3: 0] Data Frame Size */
+		cr0 |= (cfg->dfs - 1);
+	else
+		/* CTRLR0[20: 16] Data Frame Size */
+		cr0 |= FIELD_PREP(DWC_APB_CTRLR0_DFS32_MASK, cfg->dfs - 1);
 
 	if (!(dws->caps & DW_SPI_CAP_DWC_SSI))
 		/* CTRLR0[ 9:8] Transfer Mode */
@@ -828,6 +836,21 @@ static void spi_hw_init(struct device *dev, struct dw_spi *dws)
 		dev_dbg(dev, "Detected FIFO size: %u bytes\n", dws->fifo_len);
 	}
 
+	if (!(dws->caps & DW_SPI_CAP_DWC_SSI)) {
+		u32 cr0;
+
+		/*
+		 * Detect APB SSI CTRLR0 size by looking at the data
+		 * frame size field.
+		 */
+		dw_writel(dws, DW_SPI_CTRLR0, 0xffffffff);
+		cr0 = dw_readl(dws, DW_SPI_CTRLR0);
+		if (FIELD_GET(DWC_APB_CTRLR0_DFS32_MASK, cr0)) {
+			dev_dbg(dev, "Detected 32-bits max data frame size\n");
+			dws->caps |= DW_SPI_CAP_DWC_APB_XFER32;
+		}
+	}
+
 	/* enable HW fixup for explicit CS deselect for Amazon's alpine chip */
 	if (dws->caps & DW_SPI_CAP_CS_OVERRIDE)
 		dw_writel(dws, DW_SPI_CS_OVERRIDE, 0xF);
@@ -864,7 +887,10 @@ int dw_spi_add_host(struct device *dev, struct dw_spi *dws)
 
 	master->use_gpio_descriptors = true;
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LOOP;
-	master->bits_per_word_mask =  SPI_BPW_RANGE_MASK(4, 16);
+	if (dws->caps & DW_SPI_CAP_DWC_APB_XFER32)
+		master->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
+	else
+		master->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 16);
 	master->bus_num = dws->bus_num;
 	master->num_chipselect = dws->num_cs;
 	master->setup = dw_spi_setup;

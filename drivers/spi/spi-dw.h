@@ -258,6 +258,9 @@ extern u32 dw_spi_update_cr0(struct spi_controller *master,
 extern u32 dw_spi_update_cr0_v1_01a(struct spi_controller *master,
 				    struct spi_device *spi,
 				    struct spi_transfer *transfer);
+extern u32 dw_spi_update_cr0_apb_v4_01(struct spi_controller *master,
+				       struct spi_device *spi,
+				       struct spi_transfer *transfer);
 
 #ifdef CONFIG_SPI_DW_DMA
 

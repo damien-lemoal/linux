@@ -282,6 +282,35 @@ u32 dw_spi_update_cr0_v1_01a(struct spi_controller *master,
 }
 EXPORT_SYMBOL_GPL(dw_spi_update_cr0_v1_01a);
 
+/* Configure CTRLR0 for DWC_apb_ssi v4.01 */
+u32 dw_spi_update_cr0_apb_v4_01(struct spi_controller *master,
+				struct spi_device *spi,
+				struct spi_transfer *transfer)
+{
+	struct chip_data *chip = spi_get_ctldata(spi);
+	u32 cr0;
+
+	/* CTRLR0[20: 16] Data Frame Size */
+	cr0 = (transfer->bits_per_word - 1) << 16;
+
+	/* CTRLR0[5:4] Frame Format */
+	cr0 |= chip->type << SPI_FRF_OFFSET;
+
+	/*
+	 * SPI mode (SCPOL|SCPH)
+	 * CTRLR0[ 6] Serial Clock Phase
+	 * CTRLR0[ 7] Serial Clock Polarity
+	 */
+	cr0 |= ((spi->mode & SPI_CPOL) ? 1 : 0) << SPI_SCOL_OFFSET;
+	cr0 |= ((spi->mode & SPI_CPHA) ? 1 : 0) << SPI_SCPH_OFFSET;
+
+	/* CTRLR0[9:8] Transfer Mode */
+	cr0 |= (chip->tmode & SPI_TMOD_MASK) << SPI_TMOD_OFFSET;
+
+	return cr0;
+}
+EXPORT_SYMBOL_GPL(dw_spi_update_cr0_apb_v4_01);
+
 static int dw_spi_transfer_one(struct spi_controller *master,
 		struct spi_device *spi, struct spi_transfer *transfer)
 {

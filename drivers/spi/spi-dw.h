@@ -7,6 +7,7 @@
 #include <linux/irqreturn.h>
 #include <linux/io.h>
 #include <linux/scatterlist.h>
+#include <linux/bitfield.h>
 
 /* Register offsets */
 #define DW_SPI_CTRLR0			0x00
@@ -68,6 +69,10 @@
 #define DWC_SSI_CTRLR0_SCPH_OFFSET	8
 #define DWC_SSI_CTRLR0_FRF_OFFSET	6
 #define DWC_SSI_CTRLR0_DFS_OFFSET	0
+
+/* Bit fields in CTRLR0 for DWC_apb_ssi v4 */
+#define DWC_APB_SSI_CTRLR0_DFS_OFFSET	16
+#define DWC_APB_SSI_CTRLR0_DFS_MASK	GENMASK(20, 16)
 
 /* Bit fields in SR, 7 bits */
 #define SR_MASK				0x7f		/* cover 7 bits */
@@ -256,6 +261,9 @@ extern u32 dw_spi_update_cr0(struct spi_controller *master,
 			     struct spi_device *spi,
 			     struct spi_transfer *transfer);
 extern u32 dw_spi_update_cr0_v1_01a(struct spi_controller *master,
+				    struct spi_device *spi,
+				    struct spi_transfer *transfer);
+extern u32 dw_spi_update_cr0_apb_v4(struct spi_controller *master,
 				    struct spi_device *spi,
 				    struct spi_transfer *transfer);
 

@@ -9,6 +9,7 @@
 #include <linux/io.h>
 #include <linux/scatterlist.h>
 #include <linux/spi/spi-mem.h>
+#include <linux/bitfield.h>
 
 /* Register offsets */
 #define DW_SPI_CTRLR0			0x00
@@ -73,6 +74,12 @@
 #define DWC_SSI_CTRLR0_DFS_OFFSET	0
 
 /*
+ * Data frame size bits mask in CTRLR0 for DWC_apb_ssi v4 when the
+ * controller capability supports DW_SPI_CAP_DWC_APB_XFER32.
+ */
+#define DWC_APB_CTRLR0_DFS32_MASK	GENMASK(20, 16)
+
+/*
  * For Keem Bay, CTRLR0[31] is used to select controller mode.
  * 0: SSI is slave
  * 1: SSI is master
@@ -121,6 +128,7 @@ enum dw_ssi_type {
 #define DW_SPI_CAP_CS_OVERRIDE		BIT(0)
 #define DW_SPI_CAP_KEEMBAY_MST		BIT(1)
 #define DW_SPI_CAP_DWC_SSI		BIT(2)
+#define DW_SPI_CAP_DWC_APB_XFER32	BIT(3)
 
 /* Slave spi_transfer/spi_mem_op related */
 struct dw_spi_cfg {

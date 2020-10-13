@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/kendryte,k210-clk.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Kendryte K210 Clock Device Tree Bindings
+
+maintainers:
+  - Damien Le Moal <damien.lemoal@wdc.com>
+
+description: |
+  Kendryte K210 clock controller driver which support the system controller
+  subsystem supplied clocks for the various controllers and peripherals within
+  the SoC.
+
+  See also:
+  - dt-bindings/clock/k210-clk.h
+
+properties:
+  compatible:
+    const: kendryte,k210-clk
+
+  clocks:
+    maxItems: 1
+    description: System fixed rate oscillator clock
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - '#clock-cells'
+  - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/k210-clk.h>
+
+    clocks {
+      in0: oscillator {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <26000000>;
+      };
+    };
+
+    soc {
+      #address-cells = <1>;
+      #size-cells = <1>;
+      /* ... */
+
+      sysctl: system-controller@50440000 {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        compatible = "kendryte,k210-sysctl",
+                     "syscon", "simple-mfd";
+        reg = <0x50440000 0x1000>;
+        /* ... */
+        sysclk: clock-controller {
+          #clock-cells = <1>;
+          compatible = "kendryte,k210-clk";
+          clocks = <&in0>;
+        };
+        /* ... */
+      };
+    };
+

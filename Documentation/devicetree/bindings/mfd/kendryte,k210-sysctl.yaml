@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/kendryte,k210-sysctl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Kendryte K210 System Controller Device Tree Bindings
+
+maintainers:
+  - Damien Le Moal <damien.lemoal@wdc.com>
+
+description: |
+  Kendryte K210 system controller driver which provides a register map for
+  clocks and peripherals within the SoC.
+
+  See also:
+  - dt-bindings/mfd/kendryte,k210-sysctl.h
+
+properties:
+  compatible:
+    allOf:
+      - items:
+        - const: kendryte,k210-sysctl
+        - const: syscon
+        - const: simple-mfd
+
+  clocks:
+    minItems: 1
+    maxItems: 1
+    items:
+      - description: APB interface clock source
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: pclk
+
+  reg:
+    items:
+      - description: system controller register space base address and size
+
+  reg-io-width:
+    const: 4
+
+required:
+  - compatible
+  - clocks
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/mfd/k210-sysctl.h>
+
+    sysctl: system-controller@50440000 {
+      #address-cells = <1>;
+      #size-cells = <1>;
+      compatible = "kendryte,k210-sysctl",
+                   "syscon", "simple-mfd";
+      reg = <0x50440000 0x1000>;
+      reg-io-width = <4>;
+      /* ... */
+    };
+

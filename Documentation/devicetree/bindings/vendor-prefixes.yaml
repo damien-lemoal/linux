@@ -179,6 +179,8 @@ patternProperties:
     description: CALAO Systems SAS
   "^calxeda,.*":
     description: Calxeda
+  "^canaan,.*":
+    description: Canaan, Inc.
   "^capella,.*":
     description: Capella Microsystems, Inc
   "^cascoda,.*":
@@ -529,6 +531,8 @@ patternProperties:
     description: Ka-Ro electronics GmbH
   "^keithkoep,.*":
     description: Keith & Koep GmbH
+  "^kendryte,.*":
+    description: Canaan, Inc.
   "^keymile,.*":
     description: Keymile GmbH
   "^khadas,.*":

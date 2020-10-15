@@ -139,7 +139,7 @@ static inline u32 rx_max(struct dw_spi *dws)
 static void dw_writer(struct dw_spi *dws)
 {
 	u32 max;
-	u16 txw = 0;
+	u16 txw = 0xffff;
 
 	spin_lock(&dws->buf_lock);
 	max = tx_max(dws);

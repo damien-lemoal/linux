@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/kendryte,k210-fpioa.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Kendryte K210 FPIOA (Fully Programmable IO Array) Device Tree Bindings
+
+maintainers:
+  - Damien Le Moal <damien.lemoal@wdc.com>
+
+description:
+  The Kendryte K210 SoC Fully Programmable IO Array controller allows assiging
+  any of 256 possible functions to any of 48 IO pins. Pin function configuration
+  is performed on a per-pin basis.
+
+properties:
+  compatible:
+    const: kendryte,k210-fpioa
+
+  reg:
+    description: FPIOA controller register space base address and size
+
+  clocks:
+    minItems: 2
+    maxItems: 2
+    items:
+      - description: Controller reference clock source
+      - description: APB interface clock source
+
+  clock-names:
+    minItems: 2
+    maxItems: 2
+    items:
+      - const: ref
+      - const: pclk
+
+  resets:
+    maxItems: 1
+
+  kendryte,sysctl:
+    minItems: 1
+    maxItems: 1
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      phandle to the system controller node
+
+  kendryte,power-offset:
+    minItems: 1
+    maxItems: 1
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Offset of the power domain control register of the system controller.
+      The value should be the macro K210_SYSCTL_POWER_SEL defined in
+      dt-bindings/mfd/k210-sysctl.h.
+
+patternProperties:
+  '^.*$':
+    if:
+      type: object
+    then:
+      patternProperties:
+        "^pinmux$":
+          $ref: /schemas/pinctrl/pincfg-node.yaml
+          description:
+            An array of IO pins alternate functions. The values for each
+            IO pin is a combination of an IO pin number (0 to 47) with the
+            desired function for the IO pin. Functions are defined as macros in
+            dt-bindings/pinctrl/k210-pinctrl.h. The K210_FPIOA(IO pin, function)
+            is provided to facilitate the combination of IO pin numbers and
+            functions.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - resets
+  - kendryte,sysctl
+  - kendryte,power-offset
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/pinctrl/k210-pinctrl.h>
+    #include <dt-bindings/mfd/k210-sysctl.h>
+    #include <dt-bindings/clock/k210-sysctl.h>
+    #include <dt-bindings/reset/k210-sysctl.h>
+
+    fpioa: pinmux@502B0000 {
+      compatible = "kendryte,k210-fpioa";
+      reg = <0x502B0000 0x100>;
+      clocks = <&sysclk K210_CLK_FPIOA>;
+      resets = <&sysrst K210_RST_FPIOA>;
+      kendryte,sysctl = <&sysctl>;
+      kendryte,power-offset = <K210_SYSCTL_POWER_SEL>;
+      pinctrl-0 = <&fpioa_jtag>;
+      pinctrl-names = "default";
+
+      fpioa_jtag: jtag {
+        pinmux = <K210_FPIOA(0, K210_PCF_JTAG_TCLK)>,
+                 <K210_FPIOA(1, K210_PCF_JTAG_TDI)>,
+                 <K210_FPIOA(2, K210_PCF_JTAG_TMS)>,
+                 <K210_FPIOA(3, K210_PCF_JTAG_TDO)>;
+      };
+    };

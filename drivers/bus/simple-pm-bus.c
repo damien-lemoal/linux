@@ -12,13 +12,27 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/clk.h>
 
 
 static int simple_pm_bus_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	struct clk *bus_clk;
 
 	dev_dbg(&pdev->dev, "%s\n", __func__);
+
+	/* If a clock is specified, enable it */
+	bus_clk = devm_clk_get_optional(&pdev->dev, NULL);
+	if (bus_clk) {
+		int ret = clk_prepare_enable(bus_clk);
+
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Enable bus clock failed %d\n", ret);
+			return ret;
+		}
+	}
 
 	pm_runtime_enable(&pdev->dev);
 

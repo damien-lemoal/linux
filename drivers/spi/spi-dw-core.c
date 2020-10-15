@@ -137,7 +137,7 @@ static inline u32 rx_max(struct dw_spi *dws)
 static void dw_writer(struct dw_spi *dws)
 {
 	u32 max = tx_max(dws);
-	u16 txw = 0;
+	u16 txw = 0xffff;
 
 	while (max--) {
 		if (dws->tx) {

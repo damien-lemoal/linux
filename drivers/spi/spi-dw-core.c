@@ -138,10 +138,11 @@ static inline u32 rx_max(struct dw_spi *dws)
 
 static void dw_writer(struct dw_spi *dws)
 {
+	unsigned long flags;
 	u32 max;
 	u16 txw = 0xffff;
 
-	spin_lock(&dws->buf_lock);
+	spin_lock_irqsave(&dws->buf_lock, flags);
 	max = tx_max(dws);
 	while (max--) {
 		/* Set the tx word if the transfer's original "tx" is not null */
@@ -154,19 +155,21 @@ static void dw_writer(struct dw_spi *dws)
 		dw_write_io_reg(dws, DW_SPI_DR, txw);
 		dws->tx += dws->n_bytes;
 	}
-	spin_unlock(&dws->buf_lock);
+	spin_unlock_irqrestore(&dws->buf_lock, flags);
 }
 
-static void dw_reader(struct dw_spi *dws)
+static bool dw_reader(struct dw_spi *dws)
 {
+	unsigned long flags;
+	bool done;
 	u32 max;
 	u16 rxw;
 
-	spin_lock(&dws->buf_lock);
+	spin_lock_irqsave(&dws->buf_lock, flags);
 	max = rx_max(dws);
 	while (max--) {
 		rxw = dw_read_io_reg(dws, DW_SPI_DR);
-		/* Care rx only if the transfer's original "rx" is not null */
+		/* Care rx only if the transfer's original "rx" is not null. */
 		if (dws->rx_end - dws->len) {
 			if (dws->n_bytes == 1)
 				*(u8 *)(dws->rx) = rxw;
@@ -175,7 +178,12 @@ static void dw_reader(struct dw_spi *dws)
 		}
 		dws->rx += dws->n_bytes;
 	}
-	spin_unlock(&dws->buf_lock);
+
+	done = (dws->rx_end == dws->rx);
+
+	spin_unlock_irqrestore(&dws->buf_lock, flags);
+
+	return done;
 }
 
 static void int_error_stop(struct dw_spi *dws, const char *msg)
@@ -198,8 +206,7 @@ static irqreturn_t interrupt_transfer(struct dw_spi *dws)
 		return IRQ_HANDLED;
 	}
 
-	dw_reader(dws);
-	if (dws->rx_end == dws->rx) {
+	if (dw_reader(dws)) {
 		spi_mask_intr(dws, SPI_INT_TXEI);
 		spi_finalize_current_transfer(dws->master);
 		return IRQ_HANDLED;

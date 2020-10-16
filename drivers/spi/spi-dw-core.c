@@ -157,8 +157,9 @@ static void dw_writer(struct dw_spi *dws)
 	spin_unlock(&dws->buf_lock);
 }
 
-static void dw_reader(struct dw_spi *dws)
+static bool dw_reader(struct dw_spi *dws)
 {
+	bool done;
 	u32 max;
 	u16 rxw;
 
@@ -166,7 +167,7 @@ static void dw_reader(struct dw_spi *dws)
 	max = rx_max(dws);
 	while (max--) {
 		rxw = dw_read_io_reg(dws, DW_SPI_DR);
-		/* Care rx only if the transfer's original "rx" is not null */
+		/* Care rx only if the transfer's original "rx" is not null. */
 		if (dws->rx_end - dws->len) {
 			if (dws->n_bytes == 1)
 				*(u8 *)(dws->rx) = rxw;
@@ -175,7 +176,10 @@ static void dw_reader(struct dw_spi *dws)
 		}
 		dws->rx += dws->n_bytes;
 	}
+	done = (dws->rx_end == dws->rx);
 	spin_unlock(&dws->buf_lock);
+
+	return done;
 }
 
 static void int_error_stop(struct dw_spi *dws, const char *msg)
@@ -198,8 +202,7 @@ static irqreturn_t interrupt_transfer(struct dw_spi *dws)
 		return IRQ_HANDLED;
 	}
 
-	dw_reader(dws);
-	if (dws->rx_end == dws->rx) {
+	if (dw_reader(dws)) {
 		spi_mask_intr(dws, SPI_INT_TXEI);
 		spi_finalize_current_transfer(dws->master);
 		return IRQ_HANDLED;

@@ -166,17 +166,24 @@ static bool dw_reader(struct dw_spi *dws)
 	u16 rxw;
 
 	spin_lock_irqsave(&dws->buf_lock, flags);
-	max = rx_max(dws);
-	while (max--) {
-		rxw = dw_read_io_reg(dws, DW_SPI_DR);
-		/* Care rx only if the transfer's original "rx" is not null. */
-		if (dws->rx_end - dws->len) {
-			if (dws->n_bytes == 1)
-				*(u8 *)(dws->rx) = rxw;
-			else
-				*(u16 *)(dws->rx) = rxw;
+	while (1) {
+		max = rx_max(dws);
+		if (!max)
+			break;
+		while (max--) {
+			rxw = dw_read_io_reg(dws, DW_SPI_DR);
+			/*
+			 * Set rx only if the transfer's original "rx"
+			 * is not null.
+			 */
+			if (dws->rx_end - dws->len) {
+				if (dws->n_bytes == 1)
+					*(u8 *)(dws->rx) = rxw;
+				else
+					*(u16 *)(dws->rx) = rxw;
+			}
+			dws->rx += dws->n_bytes;
 		}
-		dws->rx += dws->n_bytes;
 	}
 
 	done = (dws->rx_end == dws->rx);

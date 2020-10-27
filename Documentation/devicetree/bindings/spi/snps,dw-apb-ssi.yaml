@@ -120,6 +120,11 @@ properties:
       This value will be used if the property is not explicitly defined
       for a SPI slave device. See below.
 
+  polling:
+    default: false
+    description: Ignore the device interrupt and force the use of polled
+      transfers.
+
 patternProperties:
   "^.*@[0-9a-f]+$":
     type: object

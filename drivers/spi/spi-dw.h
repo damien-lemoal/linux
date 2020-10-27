@@ -130,6 +130,7 @@ enum dw_ssi_type {
 #define DW_SPI_CAP_KEEMBAY_MST		BIT(1)
 #define DW_SPI_CAP_DWC_SSI		BIT(2)
 #define DW_SPI_CAP_DFS_32		BIT(3)
+#define DW_SPI_CAP_POLL_NODELAY		BIT(4)
 
 /* Slave spi_transfer/spi_mem_op related */
 struct dw_spi_cfg {

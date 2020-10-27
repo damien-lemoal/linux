@@ -385,14 +385,18 @@ static int dw_spi_poll_transfer(struct dw_spi *dws,
 	u16 nbits;
 	int ret;
 
-	delay.unit = SPI_DELAY_UNIT_SCK;
-	nbits = dws->n_bytes * BITS_PER_BYTE;
+	if (!(dws->caps & DW_SPI_CAP_POLL_NODELAY)) {
+		delay.unit = SPI_DELAY_UNIT_SCK;
+		nbits = dws->n_bytes * BITS_PER_BYTE;
+	}
 
 	do {
 		dw_writer(dws);
 
-		delay.value = nbits * (dws->rx_len - dws->tx_len);
-		spi_delay_exec(&delay, transfer);
+		if (!(dws->caps & DW_SPI_CAP_POLL_NODELAY)) {
+			delay.value = nbits * (dws->rx_len - dws->tx_len);
+			spi_delay_exec(&delay, transfer);
+		}
 
 		dw_reader(dws);
 

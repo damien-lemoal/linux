@@ -553,7 +553,7 @@ static struct dwapb_platform_data *dwapb_gpio_get_pdata(struct device *dev)
 	struct dwapb_platform_data *pdata;
 	struct dwapb_port_property *pp;
 	int nports;
-	int i;
+	int i, ret;
 
 	nports = device_get_child_node_count(dev);
 	if (nports == 0)
@@ -582,8 +582,16 @@ static struct dwapb_platform_data *dwapb_gpio_get_pdata(struct device *dev)
 			return ERR_PTR(-EINVAL);
 		}
 
-		if (fwnode_property_read_u32(fwnode, "ngpios", &pp->ngpio) &&
-		    fwnode_property_read_u32(fwnode, "snps,nr-gpios", &pp->ngpio)) {
+		ret = fwnode_property_read_u32(fwnode, "ngpios", &pp->ngpio);
+		if (ret) {
+			ret = fwnode_property_read_u32(fwnode, "snps,nr-gpios",
+						       &pp->ngpio);
+			if (!ret) {
+				dev_warn(dev,
+					 "deprecated \"snps,nr-gpios\" property, update device tree to use \"ngpios\".\n");
+			}
+		}
+		if (ret) {
 			dev_info(dev,
 				 "failed to get number of gpios for port%d\n",
 				 i);

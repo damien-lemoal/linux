@@ -234,9 +234,10 @@ int pm8001_phy_control(struct asd_sas_phy *sas_phy, enum phy_func func,
 		}
 		{
 			struct sas_phy *phy = sas_phy->phy;
-			uint32_t *qp = (uint32_t *)(((char *)
-				pm8001_ha->io_mem[2].memvirtaddr)
-				+ 0x1034 + (0x4000 * (phy_id & 3)));
+			unsigned long vaddr = (unsigned long)
+				pm8001_ha->io_mem[2].memvirtaddr;
+			uint32_t *qp = (uint32_t *)
+				(vaddr + 0x1034 + (0x4000 * (phy_id & 3)));
 
 			phy->invalid_dword_count = qp[0];
 			phy->running_disparity_error_count = qp[1];

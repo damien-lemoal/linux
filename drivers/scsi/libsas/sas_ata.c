@@ -159,24 +159,22 @@ static unsigned int sas_ata_qc_issue(struct ata_queued_cmd *qc)
 {
 	struct sas_task *task;
 	struct scatterlist *sg;
-	int ret = AC_ERR_SYSTEM;
 	unsigned int si, xfer = 0;
 	struct ata_port *ap = qc->ap;
 	struct domain_device *dev = ap->private_data;
 	struct sas_ha_struct *sas_ha = dev->port->ha;
 	struct Scsi_Host *host = sas_ha->core.shost;
 	struct sas_internal *i = to_sas_internal(host->transportt);
-
-	/* TODO: we should try to remove that unlock */
-	spin_unlock(ap->lock);
+	int ret;
 
 	/* If the device fell off, no sense in issuing commands */
 	if (test_bit(SAS_DEV_GONE, &dev->state))
-		goto out;
+		return AC_ERR_SYSTEM;
 
 	task = sas_alloc_task(GFP_ATOMIC);
 	if (!task)
-		goto out;
+		return AC_ERR_SYSTEM;
+
 	task->dev = dev;
 	task->task_proto = SAS_PROTOCOL_STP;
 	task->task_done = sas_ata_task_done;
@@ -220,12 +218,10 @@ static unsigned int sas_ata_qc_issue(struct ata_queued_cmd *qc)
 			ASSIGN_SAS_TASK(qc->scsicmd, NULL);
 		sas_free_task(task);
 		qc->lldd_task = NULL;
-		ret = AC_ERR_SYSTEM;
+		return AC_ERR_SYSTEM;
 	}
 
- out:
-	spin_lock(ap->lock);
-	return ret;
+	return 0;
 }
 
 static bool sas_ata_qc_fill_rtf(struct ata_queued_cmd *qc)

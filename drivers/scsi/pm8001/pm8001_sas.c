@@ -453,13 +453,18 @@ int pm8001_queue_command(struct sas_task *task, gfp_t gfp_flags)
 		ccb->ccb_tag = tag;
 		ccb->task = t;
 		ccb->device = pm8001_dev;
+
+		/* TODO: select normal or high priority */
+		atomic_inc(&pm8001_dev->running_req);
+		spin_lock(&t->task_state_lock);
+		t->task_state_flags |= SAS_TASK_AT_INITIATOR;
+		spin_unlock(&t->task_state_lock);
+
 		switch (task_proto) {
 		case SAS_PROTOCOL_SMP:
-			atomic_inc(&pm8001_dev->running_req);
 			rc = pm8001_task_prep_smp(pm8001_ha, ccb);
 			break;
 		case SAS_PROTOCOL_SSP:
-			atomic_inc(&pm8001_dev->running_req);
 			if (is_tmf)
 				rc = pm8001_task_prep_ssp_tm(pm8001_ha,
 					ccb, tmf);
@@ -468,7 +473,6 @@ int pm8001_queue_command(struct sas_task *task, gfp_t gfp_flags)
 			break;
 		case SAS_PROTOCOL_SATA:
 		case SAS_PROTOCOL_STP:
-			atomic_inc(&pm8001_dev->running_req);
 			rc = pm8001_task_prep_ata(pm8001_ha, ccb);
 			break;
 		default:
@@ -480,13 +484,12 @@ int pm8001_queue_command(struct sas_task *task, gfp_t gfp_flags)
 
 		if (rc) {
 			pm8001_dbg(pm8001_ha, IO, "rc is %x\n", rc);
+			spin_lock(&t->task_state_lock);
+			t->task_state_flags &= ~SAS_TASK_AT_INITIATOR;
+			spin_unlock(&t->task_state_lock);
 			atomic_dec(&pm8001_dev->running_req);
 			goto err_out_tag;
 		}
-		/* TODO: select normal or high priority */
-		spin_lock(&t->task_state_lock);
-		t->task_state_flags |= SAS_TASK_AT_INITIATOR;
-		spin_unlock(&t->task_state_lock);
 	} while (0);
 	rc = 0;
 	goto out_done;

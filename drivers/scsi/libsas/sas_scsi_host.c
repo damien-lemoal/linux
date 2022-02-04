@@ -316,8 +316,11 @@ static enum task_disposition sas_scsi_find_task(struct sas_task *task)
 				pr_notice("%s: task 0x%p failed to abort\n",
 					  __func__, task);
 				return TASK_ABORT_FAILED;
+			default:
+				pr_notice("%s: task 0x%p result code %d not handled, assuming failed\n",
+					  __func__, task, res);
+				return TASK_ABORT_FAILED;
 			}
-
 		}
 	}
 	return res;

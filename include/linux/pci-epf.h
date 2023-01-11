@@ -16,6 +16,7 @@
 
 struct pci_epf;
 enum pci_epc_interface_type;
+struct pci_epc_features;
 
 enum pci_notify_event {
 	CORE_INIT,
@@ -183,6 +184,25 @@ struct pci_epf_msix_tbl {
 	u32 vector_ctrl;
 };
 
+struct pci_epf_map {
+	size_t size;
+	size_t align;
+	off_t offset;
+	struct {
+		u64 phys_addr;
+		u64 phys_base;
+		u64 phys_end;
+	} host;
+	struct {
+		size_t size;
+		void __iomem *virt_addr;
+		void __iomem *virt_base;
+		phys_addr_t phys_addr;
+		phys_addr_t phys_base;
+	} pci;
+	struct pci_epf *epf;
+};
+
 #define to_pci_epf(epf_dev) container_of((epf_dev), struct pci_epf, dev)
 
 #define pci_epf_register_driver(driver)    \
@@ -211,4 +231,20 @@ int pci_epf_bind(struct pci_epf *epf);
 void pci_epf_unbind(struct pci_epf *epf);
 int pci_epf_add_vepf(struct pci_epf *epf_pf, struct pci_epf *epf_vf);
 void pci_epf_remove_vepf(struct pci_epf *epf_pf, struct pci_epf *epf_vf);
+
+int pci_epf_map(struct pci_epf_map *map, struct pci_epf *epf,
+		const struct pci_epc_features *features);
+void pci_epf_unmap(struct pci_epf_map *map);
+
+static inline bool pci_epf_map_check_fit(struct pci_epf_map *map,
+					 u64 addr, u64 end)
+{
+	return addr >= map->host.phys_base && end <= map->host.phys_end;
+}
+
+static inline void __iomem *pci_epf_map_get(struct pci_epf_map *map, u64 addr)
+{
+	return addr - map->host.phys_base + map->pci.virt_base;
+}
+
 #endif /* __LINUX_PCI_EPF_H */

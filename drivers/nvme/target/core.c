@@ -614,6 +614,7 @@ out_dev_disable:
 	nvmet_ns_dev_disable(ns);
 	goto out_unlock;
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_enable);
 
 void nvmet_ns_disable(struct nvmet_ns *ns)
 {
@@ -655,6 +656,7 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 out_unlock:
 	mutex_unlock(&subsys->lock);
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_disable);
 
 void nvmet_ns_free(struct nvmet_ns *ns)
 {
@@ -667,6 +669,7 @@ void nvmet_ns_free(struct nvmet_ns *ns)
 	kfree(ns->device_path);
 	kfree(ns);
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_free);
 
 struct nvmet_ns *nvmet_ns_alloc(struct nvmet_subsys *subsys, u32 nsid)
 {
@@ -692,6 +695,7 @@ struct nvmet_ns *nvmet_ns_alloc(struct nvmet_subsys *subsys, u32 nsid)
 
 	return ns;
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_alloc);
 
 static void nvmet_update_sq_head(struct nvmet_req *req)
 {
@@ -1210,6 +1214,7 @@ void nvmet_update_cc(struct nvmet_ctrl *ctrl, u32 new)
 		ctrl->csts &= ~NVME_CSTS_SHST_CMPLT;
 	mutex_unlock(&ctrl->lock);
 }
+EXPORT_SYMBOL_GPL(nvmet_update_cc);
 
 static void nvmet_init_cap(struct nvmet_ctrl *ctrl)
 {
@@ -1610,6 +1615,7 @@ free_subsys:
 	kfree(subsys);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL_GPL(nvmet_subsys_alloc);
 
 static void nvmet_subsys_free(struct kref *ref)
 {
@@ -1641,6 +1647,7 @@ void nvmet_subsys_put(struct nvmet_subsys *subsys)
 {
 	kref_put(&subsys->ref, nvmet_subsys_free);
 }
+EXPORT_SYMBOL_GPL(nvmet_subsys_put);
 
 static int __init nvmet_init(void)
 {

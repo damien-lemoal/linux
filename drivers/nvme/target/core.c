@@ -614,6 +614,7 @@ out_dev_disable:
 	nvmet_ns_dev_disable(ns);
 	goto out_unlock;
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_enable);
 
 void nvmet_ns_disable(struct nvmet_ns *ns)
 {
@@ -655,6 +656,7 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 out_unlock:
 	mutex_unlock(&subsys->lock);
 }
+EXPORT_SYMBOL_GPL(nvmet_ns_disable);
 
 void nvmet_ns_free(struct nvmet_ns *ns)
 {
@@ -1210,6 +1212,7 @@ void nvmet_update_cc(struct nvmet_ctrl *ctrl, u32 new)
 		ctrl->csts &= ~NVME_CSTS_SHST_CMPLT;
 	mutex_unlock(&ctrl->lock);
 }
+EXPORT_SYMBOL_GPL(nvmet_update_cc);
 
 static void nvmet_init_cap(struct nvmet_ctrl *ctrl)
 {

@@ -37,3 +37,15 @@ config PCI_EPF_VNTB
 	  between PCI Root Port and PCIe Endpoint.
 
 	  If in doubt, say "N" to disable Endpoint NTB driver.
+
+config PCI_EPF_NVME
+	tristate "PCI Endpoint NVMe function driver"
+	depends on PCI_ENDPOINT
+	select CRC32
+	select CONFIGFS_FS
+	select CONFIG_NVME_TARGET
+	help
+	   Enable this configuration option to enable the NVMe function
+	   driver for PCI Endpoint.
+
+	   If in doubt, say "N" to disable Endpoint NVMe function driver.

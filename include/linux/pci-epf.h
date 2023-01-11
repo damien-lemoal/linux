@@ -16,6 +16,7 @@
 
 struct pci_epf;
 enum pci_epc_interface_type;
+struct pci_epc_features;
 
 enum pci_notify_event {
 	CORE_INIT,
@@ -211,4 +212,5 @@ int pci_epf_bind(struct pci_epf *epf);
 void pci_epf_unbind(struct pci_epf *epf);
 int pci_epf_add_vepf(struct pci_epf *epf_pf, struct pci_epf *epf_vf);
 void pci_epf_remove_vepf(struct pci_epf *epf_pf, struct pci_epf *epf_vf);
+
 #endif /* __LINUX_PCI_EPF_H */

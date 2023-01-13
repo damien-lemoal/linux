@@ -25,6 +25,8 @@ static void nvmet_execute_get_log_page_error(struct nvmet_req *req)
 	u64 slot;
 	u64 i;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	spin_lock_irqsave(&ctrl->error_lock, flags);
 	slot = ctrl->err_counter % NVMET_ERROR_LOG_SLOTS;
 
@@ -108,6 +110,8 @@ static void nvmet_execute_get_log_page_smart(struct nvmet_req *req)
 	u16 status = NVME_SC_INTERNAL;
 	unsigned long flags;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (req->transfer_len != sizeof(*log))
 		goto out;
 
@@ -168,6 +172,8 @@ static void nvmet_execute_get_log_cmd_effects_ns(struct nvmet_req *req)
 	struct nvme_effects_log *log;
 	u16 status = NVME_SC_SUCCESS;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	log = kzalloc(sizeof(*log), GFP_KERNEL);
 	if (!log) {
 		status = NVME_SC_INTERNAL;
@@ -203,6 +209,8 @@ static void nvmet_execute_get_log_changed_ns(struct nvmet_req *req)
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	u16 status = NVME_SC_INTERNAL;
 	size_t len;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (req->transfer_len != NVME_MAX_CHANGED_NAMESPACES * sizeof(__le32))
 		goto out;
@@ -254,6 +262,8 @@ static void nvmet_execute_get_log_page_ana(struct nvmet_req *req)
 	u16 ngrps = 0;
 	u16 status;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	status = NVME_SC_INTERNAL;
 	desc = kmalloc(struct_size(desc, nsids, NVMET_MAX_NAMESPACES),
 		       GFP_KERNEL);
@@ -291,6 +301,8 @@ out:
 
 static void nvmet_execute_get_log_page(struct nvmet_req *req)
 {
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, nvmet_get_log_page_len(req->cmd)))
 		return;
 
@@ -326,6 +338,8 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	struct nvme_id_ctrl *id;
 	u32 cmd_capsule_size;
 	u16 status = 0;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (!subsys->subsys_discovered) {
 		mutex_lock(&subsys->lock);
@@ -466,6 +480,8 @@ static void nvmet_execute_identify_ns(struct nvmet_req *req)
 	struct nvme_id_ns *id;
 	u16 status;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (le32_to_cpu(req->cmd->identify.nsid) == NVME_NSID_ALL) {
 		req->error_loc = offsetof(struct nvme_identify, nsid);
 		status = NVME_SC_INVALID_NS | NVME_SC_DNR;
@@ -559,6 +575,8 @@ static void nvmet_execute_identify_nslist(struct nvmet_req *req)
 	u16 status = 0;
 	int i = 0;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	list = kzalloc(buf_size, GFP_KERNEL);
 	if (!list) {
 		status = NVME_SC_INTERNAL;
@@ -589,6 +607,8 @@ static u16 nvmet_copy_ns_identifier(struct nvmet_req *req, u8 type, u8 len,
 	};
 	u16 status;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	status = nvmet_copy_to_sgl(req, *off, &desc, sizeof(desc));
 	if (status)
 		return status;
@@ -606,6 +626,8 @@ static void nvmet_execute_identify_desclist(struct nvmet_req *req)
 {
 	off_t off = 0;
 	u16 status;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	status = nvmet_req_find_ns(req);
 	if (status)
@@ -642,6 +664,8 @@ out:
 
 static bool nvmet_handle_identify_desclist(struct nvmet_req *req)
 {
+	pr_debug("%s\n", __FUNCTION__);
+
 	switch (req->cmd->identify.csi) {
 	case NVME_CSI_NVM:
 		nvmet_execute_identify_desclist(req);
@@ -659,6 +683,8 @@ static bool nvmet_handle_identify_desclist(struct nvmet_req *req)
 
 static void nvmet_execute_identify(struct nvmet_req *req)
 {
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, NVME_IDENTIFY_DATA_SIZE))
 		return;
 
@@ -812,6 +838,8 @@ void nvmet_execute_set_features(struct nvmet_req *req)
 	u16 nsqr;
 	u16 ncqr;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, 0))
 		return;
 
@@ -883,6 +911,8 @@ void nvmet_execute_get_features(struct nvmet_req *req)
 	u32 cdw10 = le32_to_cpu(req->cmd->common.cdw10);
 	u16 status = 0;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, nvmet_feat_data_len(req, cdw10)))
 		return;
 
@@ -950,6 +980,8 @@ void nvmet_execute_async_event(struct nvmet_req *req)
 {
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, 0))
 		return;
 
@@ -989,6 +1021,8 @@ u16 nvmet_parse_admin_cmd(struct nvmet_req *req)
 {
 	struct nvme_command *cmd = req->cmd;
 	u16 ret;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (nvme_is_fabrics(cmd))
 		return nvmet_parse_fabrics_admin_cmd(req);

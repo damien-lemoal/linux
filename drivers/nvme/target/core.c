@@ -876,6 +876,8 @@ static u16 nvmet_parse_io_cmd(struct nvmet_req *req)
 	struct nvme_command *cmd = req->cmd;
 	u16 ret;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (nvme_is_fabrics(cmd))
 		return nvmet_parse_fabrics_io_cmd(req);
 
@@ -941,6 +943,7 @@ bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 
 	/* no support for fused commands yet */
 	if (unlikely(flags & (NVME_CMD_FUSE_FIRST | NVME_CMD_FUSE_SECOND))) {
+		pr_err("Fused command\n");
 		req->error_loc = offsetof(struct nvme_common_command, flags);
 		status = NVME_SC_INVALID_FIELD | NVME_SC_DNR;
 		goto fail;
@@ -952,6 +955,7 @@ bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 	 * byte aligned.
 	 */
 	if (unlikely((flags & NVME_CMD_SGL_ALL) != NVME_CMD_SGL_METABUF)) {
+		pr_err("SGL METABUF\n");
 		req->error_loc = offsetof(struct nvme_common_command, flags);
 		status = NVME_SC_INVALID_FIELD | NVME_SC_DNR;
 		goto fail;
@@ -997,6 +1001,7 @@ EXPORT_SYMBOL_GPL(nvmet_req_uninit);
 bool nvmet_check_transfer_len(struct nvmet_req *req, size_t len)
 {
 	if (unlikely(len != req->transfer_len)) {
+		pr_err("req tlen %zu != len %zu\n", req->transfer_len, len);
 		req->error_loc = offsetof(struct nvme_common_command, dptr);
 		nvmet_req_complete(req, NVME_SC_SGL_INVALID_DATA | NVME_SC_DNR);
 		return false;
@@ -1180,6 +1185,8 @@ static void nvmet_clear_ctrl(struct nvmet_ctrl *ctrl)
 void nvmet_update_cc(struct nvmet_ctrl *ctrl, u32 new)
 {
 	u32 old;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	mutex_lock(&ctrl->lock);
 	old = ctrl->cc;

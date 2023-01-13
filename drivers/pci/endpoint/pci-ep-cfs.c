@@ -11,8 +11,9 @@
 #include <linux/slab.h>
 
 #include <linux/pci-epc.h>
-#include <linux/pci-epf.h>
 #include <linux/pci-ep-cfs.h>
+
+#include "pci-epf.h"
 
 static DEFINE_IDR(functions_idr);
 static DEFINE_MUTEX(functions_mutex);

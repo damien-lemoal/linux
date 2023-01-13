@@ -12,6 +12,8 @@ static void nvmet_execute_prop_set(struct nvmet_req *req)
 	u64 val = le64_to_cpu(req->cmd->prop_set.value);
 	u16 status = 0;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, 0))
 		return;
 
@@ -40,6 +42,8 @@ static void nvmet_execute_prop_get(struct nvmet_req *req)
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	u16 status = 0;
 	u64 val = 0;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (!nvmet_check_transfer_len(req, 0))
 		return;
@@ -86,6 +90,8 @@ u16 nvmet_parse_fabrics_admin_cmd(struct nvmet_req *req)
 {
 	struct nvme_command *cmd = req->cmd;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	switch (cmd->fabrics.fctype) {
 	case nvme_fabrics_type_property_set:
 		req->execute = nvmet_execute_prop_set;
@@ -115,6 +121,8 @@ u16 nvmet_parse_fabrics_io_cmd(struct nvmet_req *req)
 {
 	struct nvme_command *cmd = req->cmd;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	switch (cmd->fabrics.fctype) {
 #ifdef CONFIG_NVME_TARGET_AUTH
 	case nvme_fabrics_type_auth_send:
@@ -142,6 +150,8 @@ static u16 nvmet_install_queue(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 	struct nvmet_ctrl *old;
 	u16 mqes = NVME_CAP_MQES(ctrl->cap);
 	u16 ret;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (!sqsize) {
 		pr_warn("queue size zero!\n");
@@ -211,6 +221,8 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 	struct nvmet_ctrl *ctrl = NULL;
 	u16 status = 0;
 	int ret;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (!nvmet_check_transfer_len(req, sizeof(struct nvmf_connect_data)))
 		return;
@@ -290,6 +302,8 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	u16 qid = le16_to_cpu(c->qid);
 	u16 status = 0;
 
+	pr_debug("%s\n", __FUNCTION__);
+
 	if (!nvmet_check_transfer_len(req, sizeof(struct nvmf_connect_data)))
 		return;
 
@@ -347,6 +361,8 @@ out_ctrl_put:
 u16 nvmet_parse_connect_cmd(struct nvmet_req *req)
 {
 	struct nvme_command *cmd = req->cmd;
+
+	pr_debug("%s\n", __FUNCTION__);
 
 	if (!nvme_is_fabrics(cmd)) {
 		pr_debug("invalid command 0x%x on unconnected queue.\n",

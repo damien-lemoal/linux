@@ -12,8 +12,9 @@
 #include <linux/module.h>
 
 #include <linux/pci-epc.h>
-#include <linux/pci-epf.h>
 #include <linux/pci-ep-cfs.h>
+
+#include "pci-epf.h"
 
 static DEFINE_MUTEX(pci_epf_mutex);
 
@@ -21,15 +22,13 @@ static struct bus_type pci_epf_bus_type;
 static const struct device_type pci_epf_type;
 
 /**
- * pci_epf_type_add_cfs() - Help function drivers to expose function specific
- *                          attributes in configfs
+ * pci_epf_type_add_cfs() - Get a function driver specific attribute group.
  * @epf: the EPF device that has to be configured using configfs
  * @group: the parent configfs group (corresponding to entries in
  *         pci_epf_device_id)
  *
- * Invoke to expose function specific attributes in configfs. If the function
- * driver does not have anything to expose (attributes configured by user),
- * return NULL.
+ * Called from pci_ep_cfs_add_type_group() when the function is created.
+ * If the function driver does not have anything to expose, return NULL.
  */
 struct config_group *pci_epf_type_add_cfs(struct pci_epf *epf,
 					  struct config_group *group)
@@ -50,7 +49,6 @@ struct config_group *pci_epf_type_add_cfs(struct pci_epf *epf,
 
 	return epf_type_group;
 }
-EXPORT_SYMBOL_GPL(pci_epf_type_add_cfs);
 
 /**
  * pci_epf_unbind() - Notify the function driver that the binding between the

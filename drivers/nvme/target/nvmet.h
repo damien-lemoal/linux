@@ -520,8 +520,23 @@ u16 nvmet_copy_from_sgl(struct nvmet_req *req, off_t off, void *buf,
 		size_t len);
 u16 nvmet_zero_sgl(struct nvmet_req *req, off_t off, size_t len);
 
-u32 nvmet_get_log_page_len(struct nvme_command *cmd);
-u64 nvmet_get_log_page_offset(struct nvme_command *cmd);
+static inline u32 nvmet_get_log_page_len(struct nvme_command *cmd)
+{
+	u32 len = le16_to_cpu(cmd->get_log_page.numdu);
+
+	len <<= 16;
+	len += le16_to_cpu(cmd->get_log_page.numdl);
+	/* NUMD is a 0's based value */
+	len += 1;
+	len *= sizeof(u32);
+
+	return len;
+}
+
+static inline u64 nvmet_get_log_page_offset(struct nvme_command *cmd)
+{
+	return le64_to_cpu(cmd->get_log_page.lpo);
+}
 
 extern struct list_head *nvmet_ports;
 void nvmet_port_disc_changed(struct nvmet_port *port,
@@ -699,6 +714,16 @@ static inline void nvmet_req_bio_put(struct nvmet_req *req, struct bio *bio)
 {
 	if (bio != &req->b.inline_bio)
 		bio_put(bio);
+}
+
+static inline u32 nvmet_feat_data_len(struct nvmet_req *req, u32 cdw10)
+{
+	switch (cdw10 & 0xff) {
+	case NVME_FEAT_HOST_ID:
+		return sizeof(req->sq->ctrl->hostid);
+	default:
+		return 0;
+	}
 }
 
 #ifdef CONFIG_NVME_TARGET_AUTH

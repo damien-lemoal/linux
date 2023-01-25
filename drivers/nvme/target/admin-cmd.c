@@ -12,34 +12,6 @@
 #include <asm/unaligned.h>
 #include "nvmet.h"
 
-u32 nvmet_get_log_page_len(struct nvme_command *cmd)
-{
-	u32 len = le16_to_cpu(cmd->get_log_page.numdu);
-
-	len <<= 16;
-	len += le16_to_cpu(cmd->get_log_page.numdl);
-	/* NUMD is a 0's based value */
-	len += 1;
-	len *= sizeof(u32);
-
-	return len;
-}
-
-static u32 nvmet_feat_data_len(struct nvmet_req *req, u32 cdw10)
-{
-	switch (cdw10 & 0xff) {
-	case NVME_FEAT_HOST_ID:
-		return sizeof(req->sq->ctrl->hostid);
-	default:
-		return 0;
-	}
-}
-
-u64 nvmet_get_log_page_offset(struct nvme_command *cmd)
-{
-	return le64_to_cpu(cmd->get_log_page.lpo);
-}
-
 static void nvmet_execute_get_log_page_noop(struct nvmet_req *req)
 {
 	nvmet_req_complete(req, nvmet_zero_sgl(req, 0, req->transfer_len));

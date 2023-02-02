@@ -181,8 +181,10 @@ static int rockchip_pcie_ep_set_bar(struct pci_epc *epc, u8 fn, u8 vfn,
 		bool is_prefetch = !!(flags & PCI_BASE_ADDRESS_MEM_PREFETCH);
 		bool is_64bits = sz > SZ_2G;
 
-		if (is_64bits && (bar & 1))
+		if (is_64bits && (bar & 1)) {
+			dev_err(&epc->dev, "Invalid BAR %d\n", (int)bar);
 			return -EINVAL;
+		}
 
 		if (is_64bits && is_prefetch)
 			ctrl =
@@ -259,6 +261,10 @@ static int rockchip_pcie_ep_map_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 	struct rockchip_pcie *pcie = &ep->rockchip;
 	u32 r = rockchip_ob_region(addr);
 
+	dev_dbg(&epc->dev,
+		"Map region %u phys addr 0x%llx to pci addr 0x%llx, %zu B\n",
+		r, addr, pci_addr, size);
+
 	if (WARN_ON_ONCE(test_bit(r, &ep->ob_region_map)))
 		return -EBUSY;
 
@@ -277,6 +283,8 @@ static void rockchip_pcie_ep_unmap_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
 	struct rockchip_pcie *rockchip = &ep->rockchip;
 	u32 r = rockchip_ob_region(phys_addr);
+
+	dev_dbg(&epc->dev, "Unmap region %u\n", r);
 
 	if (WARN_ON_ONCE(!test_bit(r, &ep->ob_region_map)))
 		return;
@@ -380,7 +388,10 @@ static void rockchip_pcie_ep_assert_intx(struct rockchip_pcie_ep *ep, u8 fn,
 static int rockchip_pcie_ep_send_legacy_irq(struct rockchip_pcie_ep *ep, u8 fn,
 					    u8 intx)
 {
+	struct rockchip_pcie *rockchip = &ep->rockchip;
 	u16 cmd;
+
+	dev_dbg(rockchip->dev, "Send legacy IRQ %d\n", (int)intx);
 
 	cmd = rockchip_pcie_read(&ep->rockchip,
 				 ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
@@ -409,6 +420,8 @@ static int rockchip_pcie_ep_send_msi_irq(struct rockchip_pcie_ep *ep, u8 fn,
 	u64 pci_addr, pci_addr_mask = 0xff;
 	u32 r;
 
+	dev_dbg(rockchip->dev, "Send MSI IRQ %d\n", (int)interrupt_num);
+
 	/* Check MSI enable bit */
 	flags = rockchip_pcie_read(&ep->rockchip,
 				   ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
@@ -420,8 +433,11 @@ static int rockchip_pcie_ep_send_msi_irq(struct rockchip_pcie_ep *ep, u8 fn,
 	mme = ((flags & ROCKCHIP_PCIE_EP_MSI_CTRL_MME_MASK) >>
 			ROCKCHIP_PCIE_EP_MSI_CTRL_MME_OFFSET);
 	msi_count = 1 << mme;
-	if (!interrupt_num || interrupt_num > msi_count)
+	if (!interrupt_num || interrupt_num > msi_count) {
+		dev_err(rockchip->dev, "Invalid interrupt %d > %d\n",
+			(int)interrupt_num, (int)msi_count);
 		return -EINVAL;
+	}
 
 	/* Set MSI private data */
 	data_mask = msi_count - 1;
@@ -455,6 +471,11 @@ static int rockchip_pcie_ep_send_msi_irq(struct rockchip_pcie_ep *ep, u8 fn,
 		ep->irq_pci_fn = fn;
 	}
 
+	dev_dbg(rockchip->dev,
+		"MSI IRQ %d: data 0x%x, pci_addr 0x%llx, offset 0x%llx\n",
+		(int)interrupt_num, data, pci_addr,
+		pci_addr & pci_addr_mask);
+
 	writew(data, ep->irq_cpu_addr + (pci_addr & pci_addr_mask));
 	return 0;
 }
@@ -471,6 +492,7 @@ static int rockchip_pcie_ep_raise_irq(struct pci_epc *epc, u8 fn, u8 vfn,
 	case PCI_EPC_IRQ_MSI:
 		return rockchip_pcie_ep_send_msi_irq(ep, fn, interrupt_num);
 	default:
+		dev_err(&epc->dev, "Invalid IRQ type\n");
 		return -EINVAL;
 	}
 }

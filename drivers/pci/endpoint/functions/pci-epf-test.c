@@ -340,7 +340,7 @@ static int pci_epf_test_copy(struct pci_epf_test *epf_test)
 	struct device *dev = &epf->dev;
 	struct pci_epc *epc = epf->epc;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
-	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	volatile struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
 
 	src_addr = pci_epc_mem_alloc_addr(epc, &src_phys_addr, reg->size);
 	if (!src_addr) {
@@ -441,7 +441,7 @@ static int pci_epf_test_read(struct pci_epf_test *epf_test)
 	struct pci_epc *epc = epf->epc;
 	struct device *dma_dev = epf->epc->dev.parent;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
-	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	volatile struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
 
 	src_addr = pci_epc_mem_alloc_addr(epc, &phys_addr, reg->size);
 	if (!src_addr) {
@@ -530,7 +530,7 @@ static int pci_epf_test_write(struct pci_epf_test *epf_test)
 	struct pci_epc *epc = epf->epc;
 	struct device *dma_dev = epf->epc->dev.parent;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
-	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	volatile struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
 
 	dst_addr = pci_epc_mem_alloc_addr(epc, &phys_addr, reg->size);
 	if (!dst_addr) {
@@ -619,7 +619,7 @@ static void pci_epf_test_raise_irq(struct pci_epf_test *epf_test, u8 irq_type,
 	struct device *dev = &epf->dev;
 	struct pci_epc *epc = epf->epc;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
-	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	volatile struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
 
 	reg->status |= STATUS_IRQ_RAISED;
 
@@ -653,7 +653,7 @@ static void pci_epf_test_cmd_handler(struct work_struct *work)
 	struct device *dev = &epf->dev;
 	struct pci_epc *epc = epf->epc;
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
-	struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
+	volatile struct pci_epf_test_reg *reg = epf_test->reg[test_reg_bar];
 
 	command = reg->command;
 	if (!command)
@@ -911,6 +911,7 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 		dev_err(dev, "Failed to allocated register space\n");
 		return -ENOMEM;
 	}
+	memset(base, 0, test_reg_size);
 	epf_test->reg[test_reg_bar] = base;
 
 	for (bar = 0; bar < PCI_STD_NUM_BARS; bar += add) {

@@ -725,6 +725,10 @@ static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 	struct pci_dev *pdev = test->pdev;
 
 	mutex_lock(&test->mutex);
+
+	reinit_completion(&test->irq_raised);
+	test->last_irq = -1;
+
 	switch (cmd) {
 	case PCITEST_BAR:
 		bar = arg;

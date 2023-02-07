@@ -527,7 +527,7 @@ static int rockchip_pcie_parse_ep_dt(struct rockchip_pcie *rockchip,
 
 	err = of_property_read_u8(dev->of_node, "max-functions",
 				  &ep->epc->max_functions);
-	if (err < 0)
+	if (err < 0 || ep->epc->max_functions > 1)
 		ep->epc->max_functions = 1;
 
 	return 0;

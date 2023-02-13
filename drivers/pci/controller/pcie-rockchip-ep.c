@@ -154,9 +154,12 @@ static int rockchip_pcie_ep_write_header(struct pci_epc *epc, u8 fn, u8 vfn,
 	rockchip_pcie_write(rockchip, hdr->subsys_id << 16,
 			    ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
 			    PCI_SUBSYSTEM_VENDOR_ID);
-	rockchip_pcie_write(rockchip, hdr->interrupt_pin << 8,
+
+	reg = (hdr->interrupt_pin << ROCKCHIP_PCIE_EP_INT_PIN_OFFSET) &
+	      ROCKCHIP_PCIE_EP_INT_PIN_MASK;
+	rockchip_pcie_write(rockchip, reg,
 			    ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
-			    PCI_INTERRUPT_LINE);
+			    ROCKCHIP_PCIE_EP_INT_LINE_REG);
 
 	return 0;
 }

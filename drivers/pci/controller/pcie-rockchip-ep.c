@@ -67,9 +67,7 @@ static void rockchip_pcie_clear_ep_ob_atu(struct rockchip_pcie *rockchip,
 	rockchip_pcie_write(rockchip, 0,
 			    ROCKCHIP_PCIE_AT_OB_REGION_DESC1(region));
 	rockchip_pcie_write(rockchip, 0,
-			    ROCKCHIP_PCIE_AT_OB_REGION_CPU_ADDR0(region));
-	rockchip_pcie_write(rockchip, 0,
-			    ROCKCHIP_PCIE_AT_OB_REGION_CPU_ADDR1(region));
+			    ROCKCHIP_PCIE_AT_OB_REGION_DESC2(region));
 }
 
 static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
@@ -77,8 +75,8 @@ static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
 					 u64 pci_addr, size_t size)
 {
 	u64 sz = 1ULL << fls64(size - 1);
-	u32 addr0, addr1, desc0, desc1;
-	u32 num_pass_bits;
+	int num_pass_bits = ilog2(sz);
+	u32 addr0, addr1, desc0;
 
 	/* Sanity checks */
 	if (WARN_ON_ONCE(ALIGN_DOWN(phys_addr, SZ_1M) != phys_addr))
@@ -89,14 +87,14 @@ static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
 		return;
 
 	/* We must pass at least 8 bits of PCI bus address */
-	num_pass_bits = max(8, ilog2(sz));
+	if (num_pass_bits < 8)
+		num_pass_bits = 8;
 
 	/* PCI bus address region */
 	addr0 = ((num_pass_bits - 1) & PCIE_CORE_OB_REGION_ADDR0_NUM_BITS) |
 		(lower_32_bits(pci_addr) & PCIE_CORE_OB_REGION_ADDR0_LO_ADDR);
 	addr1 = upper_32_bits(pci_addr);
 	desc0 = ROCKCHIP_PCIE_AT_OB_REGION_DESC0_DEVFN(fn) | type;
-	desc1 = 0;
 
 	rockchip_pcie_write(rockchip, addr0,
 			    ROCKCHIP_PCIE_AT_OB_REGION_PCI_ADDR0(r));
@@ -104,18 +102,10 @@ static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
 			    ROCKCHIP_PCIE_AT_OB_REGION_PCI_ADDR1(r));
 	rockchip_pcie_write(rockchip, desc0,
 			    ROCKCHIP_PCIE_AT_OB_REGION_DESC0(r));
-	rockchip_pcie_write(rockchip, desc1,
+	rockchip_pcie_write(rockchip, 0,
 			    ROCKCHIP_PCIE_AT_OB_REGION_DESC1(r));
-
-	/* CPU bus address region */
-	addr0 = ((num_pass_bits - 1) & PCIE_CORE_OB_REGION_ADDR0_NUM_BITS) |
-		(lower_32_bits(phys_addr) & PCIE_CORE_OB_REGION_ADDR0_LO_ADDR);
-	addr1 = upper_32_bits(phys_addr);
-
-	rockchip_pcie_write(rockchip, addr0,
-			    ROCKCHIP_PCIE_AT_OB_REGION_CPU_ADDR0(r));
-	rockchip_pcie_write(rockchip, addr1,
-			    ROCKCHIP_PCIE_AT_OB_REGION_CPU_ADDR1(r));
+	rockchip_pcie_write(rockchip, 0,
+			    ROCKCHIP_PCIE_AT_OB_REGION_DESC2(r));
 }
 
 static int rockchip_pcie_ep_write_header(struct pci_epc *epc, u8 fn, u8 vfn,

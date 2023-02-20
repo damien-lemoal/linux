@@ -289,6 +289,23 @@ static void rockchip_pcie_ep_unmap_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 	clear_bit(r, &ep->ob_region_map);
 }
 
+static void rockchip_pcie_ep_disable_msix(struct pci_epc *epc, u8 fn, u8 vfn)
+{
+	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
+	struct rockchip_pcie *rockchip = &ep->rockchip;
+	u32 reg;
+
+	dev_dbg(&epc->dev, "Disabling MSIX\n");
+
+	reg = rockchip_pcie_read(rockchip,
+				 ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
+				 ROCKCHIP_PCIE_EP_MSIX_CTRL_REG);
+	reg &= ~GENMASK(7, 0);
+	rockchip_pcie_write(rockchip, reg,
+			    ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
+			    ROCKCHIP_PCIE_EP_MSIX_CTRL_REG);
+}
+
 static int rockchip_pcie_ep_set_msi(struct pci_epc *epc, u8 fn, u8 vfn,
 				    u8 multi_msg_cap)
 {
@@ -314,6 +331,9 @@ static int rockchip_pcie_ep_set_msi(struct pci_epc *epc, u8 fn, u8 vfn,
 	rockchip_pcie_write(rockchip, flags,
 			    ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
 			    ROCKCHIP_PCIE_EP_MSI_CTRL_REG);
+
+	rockchip_pcie_ep_disable_msix(epc, fn, vfn);
+
 	return 0;
 }
 

@@ -535,6 +535,7 @@ static int rockchip_pcie_ep_probe(struct platform_device *pdev)
 	struct pci_epc *epc;
 	size_t max_regions;
 	struct pci_epc_mem_window *windows = NULL;
+	u32 cfg_msi, cfg_msix;
 	int err;
 	int i;
 
@@ -613,6 +614,26 @@ static int rockchip_pcie_ep_probe(struct platform_device *pdev)
 	set_bit(rockchip_ob_region(ep->irq_phys_addr), &ep->ob_region_map);
 
 	ep->irq_pci_addr = ROCKCHIP_PCIE_EP_DUMMY_IRQ_ADDR;
+
+	/*
+	 * Disable MSI-X because the controller is not capable of MSI-X.
+	 * This requires to skip the MSI-X capability entry in the
+	 * chain of PCIe capabilities, we get the next pointer from the
+	 * MSI-X entry and set that in the MSI capability entry. This way
+	 * the MSI-X entry is skipped (left out of the linked-list).
+	 */
+	cfg_msi = rockchip_pcie_read(rockchip,
+				     PCIE_EP_CONFIG_BASE +
+				     ROCKCHIP_PCIE_EP_MSI_CTRL_REG);
+	cfg_msi &= ~ROCKCHIP_PCIE_EP_MSI_CP1_MASK;
+
+	cfg_msix = rockchip_pcie_read(rockchip,
+				      PCIE_EP_CONFIG_BASE +
+				      ROCKCHIP_PCIE_EP_MSIX_CTRL_REG);
+	cfg_msix &= ROCKCHIP_PCIE_EP_MSIX_CP_MASK;
+	cfg_msi |= cfg_msix;
+	rockchip_pcie_write(rockchip, cfg_msi,
+			    PCIE_EP_CONFIG_BASE + ROCKCHIP_PCIE_EP_MSI_CTRL_REG);
 
 	rockchip_pcie_write(rockchip, PCIE_CLIENT_CONF_ENABLE, PCIE_CLIENT_CONFIG);
 

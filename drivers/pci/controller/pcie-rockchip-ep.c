@@ -306,6 +306,28 @@ static void rockchip_pcie_ep_disable_msix(struct pci_epc *epc, u8 fn, u8 vfn)
 			    ROCKCHIP_PCIE_EP_MSIX_CTRL_REG);
 }
 
+static void rockchip_pcie_ep_disable_l1pm(struct pci_epc *epc, u8 fn, u8 vfn)
+{
+	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
+	struct rockchip_pcie *rockchip = &ep->rockchip;
+	u32 reg;
+
+	dev_dbg(&epc->dev, "Disabling L1 PM Substates\n");
+
+	/*
+	 * Clear the next capability offset of TPH Requester Extended Capability
+	 * Header as it points to the L1 PM Substates Extended Capability
+	 * Header.
+	 */
+	reg = rockchip_pcie_read(rockchip,
+				 ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
+				 ROCKCHIP_PCIE_EP_TPH_REQ_REG);
+	reg &= ~GENMASK(31, 20);
+	rockchip_pcie_write(rockchip, reg,
+			    ROCKCHIP_PCIE_EP_FUNC_BASE(fn) +
+			    ROCKCHIP_PCIE_EP_TPH_REQ_REG);
+}
+
 static int rockchip_pcie_ep_set_msi(struct pci_epc *epc, u8 fn, u8 vfn,
 				    u8 multi_msg_cap)
 {
@@ -333,6 +355,7 @@ static int rockchip_pcie_ep_set_msi(struct pci_epc *epc, u8 fn, u8 vfn,
 			    ROCKCHIP_PCIE_EP_MSI_CTRL_REG);
 
 	rockchip_pcie_ep_disable_msix(epc, fn, vfn);
+	rockchip_pcie_ep_disable_l1pm(epc, fn, vfn);
 
 	return 0;
 }

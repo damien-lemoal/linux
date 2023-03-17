@@ -645,23 +645,6 @@ out:
 	nvmet_req_complete(req, status);
 }
 
-static bool nvmet_handle_identify_desclist(struct nvmet_req *req)
-{
-	switch (req->cmd->identify.csi) {
-	case NVME_CSI_NVM:
-		nvmet_execute_identify_desclist(req);
-		return true;
-	case NVME_CSI_ZNS:
-		if (IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
-			nvmet_execute_identify_desclist(req);
-			return true;
-		}
-		return false;
-	default:
-		return false;
-	}
-}
-
 static void nvmet_execute_identify(struct nvmet_req *req)
 {
 	if (!nvmet_check_transfer_len(req, NVME_IDENTIFY_DATA_SIZE))
@@ -711,9 +694,8 @@ static void nvmet_execute_identify(struct nvmet_req *req)
 		}
 		break;
 	case NVME_ID_CNS_NS_DESC_LIST:
-		if (nvmet_handle_identify_desclist(req) == true)
-			return;
-		break;
+		nvmet_execute_identify_desclist(req);
+		return;
 	}
 
 	nvmet_req_cns_error_complete(req);

@@ -677,7 +677,7 @@ static void nvmet_execute_identify(struct nvmet_req *req)
 			break;
 		case NVME_CSI_ZNS:
 			if (IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
-				nvmet_execute_identify_cns_cs_ns(req);
+				nvmet_execute_identify_ns_zns(req);
 				return;
 			}
 			break;

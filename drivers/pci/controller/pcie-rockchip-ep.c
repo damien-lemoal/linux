@@ -67,7 +67,7 @@ static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
 					 u32 r, u64 cpu_addr, u64 pci_addr,
 					 size_t size)
 {
-	u64 sz = 1ULL << fls64(size - 1);
+	u64 sz = 1ULL << fls64(pci_addr ^ (pci_addr + size - 1));
 	int num_pass_bits = ilog2(sz);
 	u32 addr0, addr1, desc0;
 

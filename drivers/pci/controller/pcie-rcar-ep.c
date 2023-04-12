@@ -11,6 +11,7 @@
 #include <linux/of_platform.h>
 #include <linux/pci.h>
 #include <linux/pci-epc.h>
+#include <linux/pci-epf.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 

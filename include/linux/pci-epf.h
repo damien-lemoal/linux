@@ -12,10 +12,9 @@
 #include <linux/configfs.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
-#include <linux/pci.h>
+#include <linux/pci-epc.h>
 
 struct pci_epf;
-enum pci_epc_interface_type;
 
 enum pci_barno {
 	NO_BAR = -1,

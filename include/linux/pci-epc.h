@@ -9,9 +9,13 @@
 #ifndef __LINUX_PCI_EPC_H
 #define __LINUX_PCI_EPC_H
 
-#include <linux/pci-epf.h>
+#include <linux/pci.h>
 
 struct pci_epc;
+struct pci_epf;
+struct pci_epf_bar;
+struct pci_epf_header;
+enum pci_barno;
 
 enum pci_epc_interface_type {
 	UNKNOWN_INTERFACE = -1,

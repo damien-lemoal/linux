@@ -12,10 +12,9 @@
 #include <linux/configfs.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
-#include <linux/pci.h>
+#include <linux/pci-epc.h>
 
 struct pci_epf;
-enum pci_epc_interface_type;
 
 enum pci_barno {
 	NO_BAR = -1,
@@ -65,16 +64,6 @@ struct pci_epf_ops {
 	void	(*unbind)(struct pci_epf *epf);
 	struct config_group *(*add_cfs)(struct pci_epf *epf,
 					struct config_group *group);
-};
-
-/**
- * struct pci_epf_event_ops - Callbacks for capturing the EPC events
- * @core_init: Callback for the EPC initialization complete event
- * @link_up: Callback for the EPC link up event
- */
-struct pci_epc_event_ops {
-	int (*core_init)(struct pci_epf *epf);
-	int (*link_up)(struct pci_epf *epf);
 };
 
 /**

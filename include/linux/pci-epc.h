@@ -9,9 +9,13 @@
 #ifndef __LINUX_PCI_EPC_H
 #define __LINUX_PCI_EPC_H
 
-#include <linux/pci-epf.h>
+#include <linux/pci.h>
 
 struct pci_epc;
+struct pci_epf;
+struct pci_epf_bar;
+struct pci_epf_header;
+enum pci_barno;
 
 enum pci_epc_interface_type {
 	UNKNOWN_INTERFACE = -1,
@@ -31,6 +35,16 @@ pci_epc_interface_string(enum pci_epc_interface_type type)
 		return "UNKNOWN interface";
 	}
 }
+
+/**
+ * struct pci_epf_event_ops - Callbacks for capturing the EPC events
+ * @core_init: Callback for the EPC initialization complete event
+ * @link_up: Callback for the EPC link up event
+ */
+struct pci_epc_event_ops {
+	int (*core_init)(struct pci_epf *epf);
+	int (*link_up)(struct pci_epf *epf);
+};
 
 /**
  * struct pci_epc_ops - set of function pointers for performing EPC operations

@@ -43,6 +43,10 @@ pci_epc_interface_string(enum pci_epc_interface_type type)
  * @size: size of the mapping from the start address of the RC PCI region
  * @phys_size: size of the controller memory needed for the mapping
  * @phys_ofst: offset into the controller memory needed for the mapping
+ * @phys_base: base physical address of the allocated EPC memory
+ * @phys_addr: physical address at which @pci_addr is mapped
+ * @virt_base: base virtual address of the allocated EPC memory
+ * @virt_addr: virtual address at which @pci_addr is mapped
  */
 struct pci_epc_map {
 	phys_addr_t	pci_addr;
@@ -50,6 +54,10 @@ struct pci_epc_map {
 
 	size_t		phys_size;
 	phys_addr_t	phys_ofst;
+	phys_addr_t	phys_base;
+	phys_addr_t	phys_addr;
+	void __iomem	*virt_base;
+	void __iomem	*virt_addr;
 };
 
 /**
@@ -270,4 +278,10 @@ void __iomem *pci_epc_mem_alloc_addr(struct pci_epc *epc,
 				     phys_addr_t *phys_addr, size_t size);
 void pci_epc_mem_free_addr(struct pci_epc *epc, phys_addr_t phys_addr,
 			   void __iomem *virt_addr, size_t size);
+
+ssize_t pci_epc_mem_map(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			u64 pci_addr, size_t size, struct pci_epc_map *map);
+void pci_epc_mem_unmap(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+		       struct pci_epc_map *map);
+
 #endif /* __LINUX_PCI_EPC_H */

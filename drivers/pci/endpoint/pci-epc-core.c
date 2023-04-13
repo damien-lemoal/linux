@@ -440,6 +440,52 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_unmap_addr);
 
 /**
+ * pci_epc_map_size() - Get the offset into and the size of a controller memory
+ *			address needed to map a RC PCI address region
+ * @epc: the EPC device on which address is allocated
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: PCI address to which the physical address should be mapped
+ * @pci_size: the size of the mapping starting from @pci_addr
+ * @phys_size: populate here the actual size of the controller memory that must
+ *	       be allocated for the mapping
+ * @phys_ofst: populate here the offset into the allocated controller memory
+ *	       for the mapping
+ *
+ * Invoke the controller map_size operation to obtain the size and the offset
+ * into a controller address region that must be allocated to map @size bytes of
+ * the RC PCI address space starting from @pci_addr. Returns the size of the
+ * mapping that can be handled by the controller, which may be less than @size.
+ */
+ssize_t pci_epc_map_size(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			 u64 pci_addr, size_t pci_size,
+			 size_t *phys_size, phys_addr_t *phys_ofst)
+{
+	ssize_t map_size;
+
+	if (!pci_epc_check_func(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!pci_size || !phys_size || !phys_ofst)
+		return -EINVAL;
+
+	if (!epc->ops->map_size) {
+		/* Assume that the controller has no constraints */
+		*phys_size = pci_size;
+		*phys_ofst = 0;
+		return pci_size;
+	}
+
+	mutex_lock(&epc->lock);
+	map_size = epc->ops->map_size(epc, func_no, vfunc_no,
+				      pci_addr, pci_size, phys_size, phys_ofst);
+	mutex_unlock(&epc->lock);
+
+	return map_size;
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_size);
+
+/**
  * pci_epc_map_addr() - map CPU address to PCI address
  * @epc: the EPC device on which address is allocated
  * @func_no: the physical endpoint function number in the EPC device

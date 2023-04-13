@@ -237,6 +237,30 @@ static inline u32 rockchip_ob_region(phys_addr_t addr)
 	return (addr >> ilog2(SZ_1M)) & 0x1f;
 }
 
+static ssize_t rockchip_pcie_ep_map_size(struct pci_epc *epc, u8 fn, u8 vfn,
+					 u64 pci_addr, size_t pci_size,
+					 size_t *phys_size,
+					 phys_addr_t *phys_ofst)
+{
+	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
+	phys_addr_t ofst;
+	size_t map_size;
+	int num_bits =
+		rockchip_pcie_ep_ob_atu_num_bits(&ep->rockchip, pci_addr,
+						 pci_size);
+
+	ofst = pci_addr & ((1UL << num_bits) - 1);
+	if (ofst + pci_size > SZ_1M)
+		map_size = SZ_1M - ofst;
+	else
+		map_size = pci_size;
+
+	*phys_size = ALIGN(ofst + map_size, ROCKCHIP_PCIE_AT_SIZE_ALIGN);
+	*phys_ofst = ofst;
+
+	return map_size;
+}
+
 static int rockchip_pcie_ep_map_addr(struct pci_epc *epc, u8 fn, u8 vfn,
 				     phys_addr_t addr, u64 pci_addr,
 				     size_t size)
@@ -457,6 +481,7 @@ static const struct pci_epc_ops rockchip_pcie_epc_ops = {
 	.write_header	= rockchip_pcie_ep_write_header,
 	.set_bar	= rockchip_pcie_ep_set_bar,
 	.clear_bar	= rockchip_pcie_ep_clear_bar,
+	.map_size	= rockchip_pcie_ep_map_size,
 	.map_addr	= rockchip_pcie_ep_map_addr,
 	.unmap_addr	= rockchip_pcie_ep_unmap_addr,
 	.set_msi	= rockchip_pcie_ep_set_msi,

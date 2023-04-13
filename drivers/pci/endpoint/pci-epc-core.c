@@ -440,6 +440,46 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_unmap_addr);
 
 /**
+ * pci_epc_map_size() - Get the offset into and the size of a controller memory
+ *			address needed to map a RC PCI address region
+ * @epc: the EPC device on which address is allocated
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: PCI address to which the physical address should be mapped
+ * @size: the size of the mapping
+ * @ofst: populate the offset into the allocated controller memory for the
+ *        mapping here
+ *
+ * Invoke the controller map_size operation to obtain the size and the offset
+ * into a controller address region that must be used to map @size bytes of
+ * the RC PCI address space starting from @pci_addr.
+ */
+ssize_t pci_epc_map_size(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			 u64 pci_addr, size_t size, phys_addr_t *ofst)
+{
+	ssize_t map_size;
+
+	if (!pci_epc_check_func(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!size || !ofst)
+		return -EINVAL;
+
+	if (!epc->ops->map_size) {
+		*ofst = 0;
+		return size;
+	}
+
+	mutex_lock(&epc->lock);
+	map_size = epc->ops->map_size(epc, func_no, vfunc_no,
+				      pci_addr, size, ofst);
+	mutex_unlock(&epc->lock);
+
+	return map_size;
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_size);
+
+/**
  * pci_epc_map_addr() - map CPU address to PCI address
  * @epc: the EPC device on which address is allocated
  * @func_no: the physical endpoint function number in the EPC device

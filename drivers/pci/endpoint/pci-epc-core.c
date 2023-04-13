@@ -439,6 +439,58 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_unmap_addr);
 
 /**
+ * pci_epc_map_info() - Get the offset into and the size of a controller memory
+ *			address needed to map a RC PCI address region
+ * @epc: the EPC device on which address is allocated
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: PCI address to which the physical address should be mapped
+ * @size: the size of the mapping starting from @pci_addr
+ * @map: populate here the actual size and offset into the controller memory
+ *       that must be allocated for the mapping
+ *
+ * Invoke the controller map_info operation to obtain the size and the offset
+ * into a controller address region that must be allocated to map @size
+ * bytes of the RC PCI address space starting from @pci_addr.
+ *
+ * The size of the mapping that can be handled by the controller is indicated
+ * using the pci_size field of @map. This size may be smaller than the requested
+ * @size. In such case, the function driver must handle the mapping using
+ * several fragments. The offset into the controller memory for the effective
+ * mapping of the @pci_addr..@pci_addr+@map->pci_size address range is indicated
+ * using the map_ofst field of @map.
+ */
+int pci_epc_map_info(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+		     u64 pci_addr, size_t size, struct pci_epc_map *map)
+{
+	int ret;
+
+	if (!pci_epc_check_func(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!size || !map)
+		return -EINVAL;
+
+	map->pci_addr = pci_addr;
+	map->pci_size = size;
+
+	if (!epc->ops->map_info) {
+		/* Assume that the controller has no constraints */
+		map->map_pci_addr = pci_addr;
+		map->map_size = size;
+		map->map_ofst = 0;
+		return 0;
+	}
+
+	mutex_lock(&epc->lock);
+	ret = epc->ops->map_info(epc, func_no, vfunc_no, map);
+	mutex_unlock(&epc->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_info);
+
+/**
  * pci_epc_map_addr() - map CPU address to PCI address
  * @epc: the EPC device on which address is allocated
  * @func_no: the physical endpoint function number in the EPC device

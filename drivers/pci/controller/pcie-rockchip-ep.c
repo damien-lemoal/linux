@@ -63,15 +63,21 @@ static void rockchip_pcie_clear_ep_ob_atu(struct rockchip_pcie *rockchip,
 			    ROCKCHIP_PCIE_AT_OB_REGION_DESC1(region));
 }
 
+static int rockchip_pcie_ep_ob_atu_num_bits(struct rockchip_pcie *rockchip,
+					    u64 pci_addr, size_t size)
+{
+	int num_pass_bits = fls64(pci_addr ^ (pci_addr + size - 1));
+
+	return max(num_pass_bits, 8);
+}
+
 static void rockchip_pcie_prog_ep_ob_atu(struct rockchip_pcie *rockchip, u8 fn,
 					 u32 r, u64 cpu_addr, u64 pci_addr,
 					 size_t size)
 {
-	int num_pass_bits = fls64(size - 1);
+	int num_pass_bits =
+		rockchip_pcie_ep_ob_atu_num_bits(rockchip, pci_addr, size);
 	u32 addr0, addr1, desc0;
-
-	if (num_pass_bits < 8)
-		num_pass_bits = 8;
 
 	addr0 = ((num_pass_bits - 1) & PCIE_CORE_OB_REGION_ADDR0_NUM_BITS) |
 		(lower_32_bits(pci_addr) & PCIE_CORE_OB_REGION_ADDR0_LO_ADDR);
@@ -228,6 +234,24 @@ static void rockchip_pcie_ep_clear_bar(struct pci_epc *epc, u8 fn, u8 vfn,
 static inline u32 rockchip_ob_region(phys_addr_t addr)
 {
 	return (addr >> ilog2(SZ_1M)) & 0x1f;
+}
+
+static ssize_t rockchip_pcie_ep_map_size(struct pci_epc *epc, u8 fn, u8 vfn,
+					 u64 pci_addr, size_t size,
+					 phys_addr_t *phys_ofst)
+{
+	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
+	phys_addr_t ofst;
+	int num_bits =
+		rockchip_pcie_ep_ob_atu_num_bits(&ep->rockchip, pci_addr, size);
+
+	ofst = pci_addr & ((1UL << num_bits) - 1);
+	if (size + ofst > SZ_1M)
+		return -ENOMEM;
+
+	*phys_ofst = ofst;
+
+	return ofst + size;
 }
 
 static int rockchip_pcie_ep_map_addr(struct pci_epc *epc, u8 fn, u8 vfn,
@@ -450,6 +474,7 @@ static const struct pci_epc_ops rockchip_pcie_epc_ops = {
 	.write_header	= rockchip_pcie_ep_write_header,
 	.set_bar	= rockchip_pcie_ep_set_bar,
 	.clear_bar	= rockchip_pcie_ep_clear_bar,
+	.map_size	= rockchip_pcie_ep_map_size,
 	.map_addr	= rockchip_pcie_ep_map_addr,
 	.unmap_addr	= rockchip_pcie_ep_unmap_addr,
 	.set_msi	= rockchip_pcie_ep_set_msi,

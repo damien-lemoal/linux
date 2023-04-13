@@ -440,6 +440,36 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_unmap_addr);
 
 /**
+ * pci_epc_map_offset() - Get CPU address offset for a PCI address
+ * @epc: the EPC device on which address is allocated
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: PCI address from which the transfer will start
+ * @size: the size of the PCI transfer
+ *
+ * Invoke the controller map_ofst method for a PCI address to obtain the offset
+ * into a CPU address region to map the PCI address.
+ */
+ssize_t pci_epc_map_offset(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			   u64 pci_addr, size_t size)
+{
+	ssize_t ofst;
+
+	if (!pci_epc_check_func(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!epc->ops->map_offset)
+		return 0;
+
+	mutex_lock(&epc->lock);
+	ofst = epc->ops->map_offset(epc, func_no, vfunc_no, pci_addr, size);
+	mutex_unlock(&epc->lock);
+
+	return ofst;
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_offset);
+
+/**
  * pci_epc_map_addr() - map CPU address to PCI address
  * @epc: the EPC device on which address is allocated
  * @func_no: the physical endpoint function number in the EPC device

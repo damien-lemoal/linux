@@ -290,10 +290,13 @@ static int pci_epf_nvme_map(struct pci_epf_nvme *nvme,
 	size_t ofst;
 	int ret;
 
+	// Map size, round to the next power of two times 2
+	map->size = 1 << (fls64(size-1)+1);
 	map->pci_addr = pci_addr;
-	map->pci_base = ALIGN_DOWN(pci_addr, PAGE_SIZE);
+	map->pci_base = ALIGN_DOWN(pci_addr, map->size);
+	// Above is equivalent to: map->pci_base = pci_addr & ~(map->size-1);
 	ofst = map->pci_addr - map->pci_base;
-	map->size = ALIGN(size + ofst, PAGE_SIZE);
+	// Above is equivalent to: ofst = map->pci_addr & (map->size-1);
 
 	map->virt_base = pci_epc_mem_alloc_addr(epc, &map->phys_base, map->size);
 	if (!map->virt_base) {

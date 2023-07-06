@@ -644,7 +644,7 @@ static void pci_epf_mhi_unbind(struct pci_epf *epf)
 	pci_epc_clear_bar(epc, epf->func_no, epf->vfunc_no, epf_bar);
 }
 
-static struct pci_epc_event_ops pci_epf_mhi_event_ops = {
+static struct pci_epf_event_ops pci_epf_mhi_event_ops = {
 	.core_init = pci_epf_mhi_core_init,
 	.link_up = pci_epf_mhi_link_up,
 	.link_down = pci_epf_mhi_link_down,

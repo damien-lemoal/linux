@@ -663,6 +663,11 @@
 	pinctrl-0 = <&pcie_perst>;
 	vpcie12v-supply = <&vcc12v_dcin>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
+	status = "disabled";
+};
+
+&pcie0_ep {
+	ep-gpios = <&gpio2 RK_PD4 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 

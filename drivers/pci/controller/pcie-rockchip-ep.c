@@ -10,11 +10,13 @@
 
 #include <linux/configfs.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/pci-epc.h>
 #include <linux/platform_device.h>
 #include <linux/pci-epf.h>
+#include <linux/gpio/consumer.h>
 #include <linux/sizes.h>
 
 #include "pcie-rockchip.h"
@@ -49,6 +51,141 @@ struct rockchip_pcie_ep {
 	u8			irq_pci_fn;
 	u8			irq_pending;
 };
+
+
+static void rockchip_pcie_ep_retrain_link(struct rockchip_pcie *rockchip)
+{
+	u32 status;
+
+	status = rockchip_pcie_read(rockchip, PCIE_EP_CONFIG_LCS);
+	status |= PCI_EXP_LNKCTL_RL;
+	rockchip_pcie_write(rockchip, status, PCIE_EP_CONFIG_LCS);
+}
+
+static int rockchip_pcie_ep_train_link(struct rockchip_pcie *rockchip)
+{
+	struct device *dev = rockchip->dev;
+	const char *speed_str;
+	int speed, width;
+	u32 status;
+	int err;
+
+	/* Enable Gen1 training and wait for its completion */
+	rockchip_pcie_write(rockchip, PCIE_CLIENT_LINK_TRAIN_ENABLE,
+			    PCIE_CLIENT_CONFIG);
+	rockchip_pcie_ep_retrain_link(rockchip);
+
+	err = readl_poll_timeout(rockchip->apb_base + PCIE_CORE_CTRL,
+				 status, PCIE_LINK_TRAINING_DONE(status), 50,
+				 LINK_TRAIN_TIMEOUT);
+	if (err) {
+		dev_err(dev, "Link training failed");
+		return -ENOMEDIUM;
+	}
+
+	/* Make sure that the link is up */
+	err = readl_poll_timeout(rockchip->apb_base + PCIE_CLIENT_BASIC_STATUS1,
+				 status, PCIE_LINK_UP(status), 50,
+				 LINK_TRAIN_TIMEOUT);
+	if (err) {
+		dev_err(dev, "Link is down");
+		return -ENOMEDIUM;
+	}
+
+	/* Check the current speed */
+	status = rockchip_pcie_read(rockchip, PCIE_CORE_CTRL);
+	if (!PCIE_LINK_IS_GEN2(status) && rockchip->link_gen == 2) {
+		/* Enable retrain for gen2 */
+		status = rockchip_pcie_read(rockchip, PCIE_EP_CONFIG_LCS);
+		status |= PCI_EXP_LNKCTL_RL;
+		rockchip_pcie_write(rockchip, status, PCIE_EP_CONFIG_LCS);
+
+		err = readl_poll_timeout(rockchip->apb_base + PCIE_CORE_CTRL,
+					 status, PCIE_LINK_IS_GEN2(status), 50,
+					 LINK_TRAIN_TIMEOUT);
+		if (err)
+			dev_err(dev,
+				"Link gen2 training failed, falling back to gen1\n");
+	}
+
+	if (!rockchip->link_up) {
+		status = rockchip_pcie_read(rockchip, PCIE_CORE_CTRL);
+		width = 0x1 << ((status & PCIE_CORE_PL_CONF_LANE_MASK) >>
+				PCIE_CORE_PL_CONF_LANE_SHIFT);
+		speed = status & PCIE_CORE_PL_CONF_SPEED_MASK;
+		if (!speed)
+			speed_str = "2.5GT/s";
+		else if (speed == PCIE_CORE_PL_CONF_SPEED_5G)
+			speed_str = "5GT/s";
+		else
+			speed_str = "unknown";
+
+		dev_info(dev, "Link up (speed %s, width x%d)\n",
+			 speed_str, width);
+	}
+
+	return 0;
+}
+
+static irqreturn_t rockchip_pcie_ep_perst_irq_thread(int irq, void *data)
+{
+	struct pci_epc *epc = data;
+	struct rockchip_pcie_ep *ep = epc_get_drvdata(epc);
+	struct rockchip_pcie *rockchip = &ep->rockchip;
+	struct device *dev = rockchip->dev;
+	int err;
+	u32 perst;
+
+	perst = gpiod_get_value(rockchip->ep_gpio);
+	if (!perst) {
+		dev_dbg(dev, "PERST de-asserted: training link\n");
+		err = rockchip_pcie_ep_train_link(rockchip);
+		if (!err && !rockchip->link_up) {
+			rockchip->link_up = true;
+			pci_epc_linkup(epc);
+		}
+	} else {
+		dev_dbg(dev, "PERST asserted: link down\n");
+		if (rockchip->link_up) {
+			dev_info(dev, "Link down\n");
+			pci_epc_linkdown(epc);
+			rockchip->link_up = false;
+		}
+	}
+
+	irq_set_irq_type(gpiod_to_irq(rockchip->ep_gpio),
+			 (perst ? IRQF_TRIGGER_HIGH : IRQF_TRIGGER_LOW));
+
+	return IRQ_HANDLED;
+}
+
+static int rockchip_pcie_ep_setup_irq(struct rockchip_pcie *rockchip,
+				      struct pci_epc *epc)
+{
+	struct device *dev = rockchip->dev;
+	int err;
+
+	if (!rockchip->ep_gpio)
+		return -ENODEV;
+
+	/* PCIe reset interrupt */
+	rockchip->perst_irq = gpiod_to_irq(rockchip->ep_gpio);
+	if (rockchip->perst_irq < 0) {
+		dev_err(dev, "No corresponding irq for perst GPIO");
+		return rockchip->perst_irq;
+	}
+
+	err = devm_request_threaded_irq(dev, rockchip->perst_irq, NULL,
+					rockchip_pcie_ep_perst_irq_thread,
+					IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+					"pcie-ep-perst", epc);
+	if (err) {
+		dev_err(dev, "Failed to request perst IRQ\n");
+		return err;
+	}
+
+	return 0;
+}
 
 static void rockchip_pcie_clear_ep_ob_atu(struct rockchip_pcie *rockchip,
 					  u32 region)
@@ -460,7 +597,7 @@ static int rockchip_pcie_ep_start(struct pci_epc *epc)
 }
 
 static const struct pci_epc_features rockchip_pcie_epc_features = {
-	.linkup_notifier = false,
+	.linkup_notifier = true,
 	.msi_capable = true,
 	.msix_capable = false,
 	.align = ROCKCHIP_PCIE_AT_SIZE_ALIGN,
@@ -580,6 +717,7 @@ static int rockchip_pcie_ep_probe(struct platform_device *pdev)
 
 	rockchip = &ep->rockchip;
 	rockchip->is_rc = false;
+	rockchip->link_up = false;
 	rockchip->dev = dev;
 
 	epc = devm_pci_epc_create(dev, &rockchip_pcie_epc_ops);
@@ -637,7 +775,14 @@ static int rockchip_pcie_ep_probe(struct platform_device *pdev)
 	rockchip_pcie_write(rockchip, PCIE_CLIENT_CONF_ENABLE,
 			    PCIE_CLIENT_CONFIG);
 
+	err = rockchip_pcie_ep_setup_irq(rockchip, epc);
+	if (err < 0)
+		goto err_uninit_port;
+
 	return 0;
+
+err_uninit_port:
+	rockchip_pcie_deinit_phys(rockchip);
 err_disable_clocks:
 	rockchip_pcie_disable_clocks(rockchip);
 err_epc_mem_exit:

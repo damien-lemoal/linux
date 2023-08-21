@@ -70,6 +70,7 @@ enum {
 	NVMF_OPT_DISCOVERY	= 1 << 22,
 	NVMF_OPT_DHCHAP_SECRET	= 1 << 23,
 	NVMF_OPT_DHCHAP_CTRL_SECRET = 1 << 24,
+	NVMF_OPT_HIDDEN_NS	= 1 << 25,
 };
 
 /**
@@ -109,6 +110,8 @@ enum {
  * @nr_poll_queues: number of queues for polling I/O
  * @tos: type of service
  * @fast_io_fail_tmo: Fast I/O fail timeout in seconds
+ * @fast_io_fail_tmo: Fast I/O fail timeout in seconds
+ * @hide_dev: Hide block devices for the namesapces of the controller
  */
 struct nvmf_ctrl_options {
 	unsigned		mask;
@@ -131,6 +134,7 @@ struct nvmf_ctrl_options {
 	bool			disable_sqflow;
 	bool			hdr_digest;
 	bool			data_digest;
+	bool			hidden_ns;
 	unsigned int		nr_write_queues;
 	unsigned int		nr_poll_queues;
 	int			tos;

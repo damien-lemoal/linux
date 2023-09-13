@@ -1037,6 +1037,34 @@ int nvme_execute_rq(struct request *rq, bool at_head)
 }
 EXPORT_SYMBOL_NS_GPL(nvme_execute_rq, NVME_TARGET_PASSTHRU);
 
+static struct request *nvme_alloc_cmd_req(struct request_queue *q,
+		struct nvme_command *cmd, void *buffer, unsigned bufflen,
+		int qid, blk_mq_req_flags_t flags)
+{
+	struct request *req;
+	int ret = 0;
+
+	if (qid == NVME_QID_ANY)
+		req = blk_mq_alloc_request(q, nvme_req_op(cmd), flags);
+	else
+		req = blk_mq_alloc_request_hctx(q, nvme_req_op(cmd), flags,
+						qid - 1);
+	if (IS_ERR(req))
+		return req;
+
+	nvme_init_request(req, cmd);
+
+	if (buffer && bufflen) {
+		ret = blk_rq_map_kern(q, req, buffer, bufflen, GFP_KERNEL);
+		if (ret) {
+			blk_mq_free_request(req);
+			return ERR_PTR(ret);
+		}
+	}
+
+	return req;
+}
+
 /*
  * Returns 0 on success.  If the result is negative, it's a Linux error code;
  * if the result is positive, it's an NVM Express status code
@@ -1048,26 +1076,14 @@ int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 	struct request *req;
 	int ret;
 
-	if (qid == NVME_QID_ANY)
-		req = blk_mq_alloc_request(q, nvme_req_op(cmd), flags);
-	else
-		req = blk_mq_alloc_request_hctx(q, nvme_req_op(cmd), flags,
-						qid - 1);
-
+	req = nvme_alloc_cmd_req(q, cmd, buffer, bufflen, qid, flags);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	nvme_init_request(req, cmd);
-
-	if (buffer && bufflen) {
-		ret = blk_rq_map_kern(q, req, buffer, bufflen, GFP_KERNEL);
-		if (ret)
-			goto out;
-	}
 
 	ret = nvme_execute_rq(req, at_head);
 	if (result && ret >= 0)
 		*result = nvme_req(req)->result;
- out:
+
 	blk_mq_free_request(req);
 	return ret;
 }
@@ -1080,6 +1096,60 @@ int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 			NVME_QID_ANY, 0, 0);
 }
 EXPORT_SYMBOL_GPL(nvme_submit_sync_cmd);
+
+static enum rq_end_io_ret nvme_async_cmd_end_io(struct request *req,
+						blk_status_t blk_status)
+{
+	struct nvme_async_cmd_cb *cmd_cb = req->end_io_data;
+	union nvme_result result;
+	int status = 0;
+
+	if (cmd_cb && cmd_cb->complete) {
+		if (nvme_req(req)->flags & NVME_REQ_CANCELLED)
+			status = -EINTR;
+		else if (nvme_req(req)->status)
+			status = nvme_req(req)->status;
+		else if (blk_status != BLK_STS_OK)
+			status = blk_status_to_errno(blk_status);
+		if (status >= 0)
+			result = nvme_req(req)->result;
+	}
+
+	blk_mq_free_request(req);
+
+	if (cmd_cb && cmd_cb->complete)
+		cmd_cb->complete(cmd_cb->data, status, &result);
+
+	return RQ_END_IO_NONE;
+}
+
+int __nvme_submit_async_cmd(struct request_queue *q, struct nvme_command *cmd,
+		union nvme_result *result, void *buffer, unsigned bufflen,
+		int qid, int at_head, blk_mq_req_flags_t flags,
+		struct nvme_async_cmd_cb *cmd_cb)
+{
+	struct request *req;
+
+	req = nvme_alloc_cmd_req(q, cmd, buffer, bufflen, qid, flags);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	req->end_io = nvme_async_cmd_end_io;
+	req->end_io_data = cmd_cb;
+	blk_execute_rq_nowait(req, at_head);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(__nvme_submit_async_cmd);
+
+int nvme_submit_async_cmd(struct request_queue *q, struct nvme_command *cmd,
+			  void *buffer, unsigned bufflen,
+			  struct nvme_async_cmd_cb *cmd_cb)
+{
+	return __nvme_submit_async_cmd(q, cmd, NULL, buffer, bufflen,
+				       NVME_QID_ANY, 0, 0, cmd_cb);
+}
+EXPORT_SYMBOL_GPL(nvme_submit_async_cmd);
 
 u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
 {

@@ -859,6 +859,25 @@ int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 		union nvme_result *result, void *buffer, unsigned bufflen,
 		int qid, nvme_submit_flags_t flags);
+
+struct nvme_async_cmd_endio_cb {
+	/*
+	 * If status is negative, it is a Linux error code.
+	 * If status is positive, it is an NVM Express status code.
+	 */
+	void 			(*end_io)(void *data, int status,
+					  union nvme_result *result);
+	void 			*data;
+};
+
+int nvme_submit_async_cmd(struct request_queue *q, struct nvme_command *cmd,
+			  void *buf, unsigned bufflen,
+			  struct nvme_async_cmd_endio_cb *endio_cb);
+int __nvme_submit_async_cmd(struct request_queue *q, struct nvme_command *cmd,
+		union nvme_result *result, void *buffer, unsigned bufflen,
+		int qid, nvme_submit_flags_t flags,
+		struct nvme_async_cmd_endio_cb *endio_cb);
+
 int nvme_set_features(struct nvme_ctrl *dev, unsigned int fid,
 		      unsigned int dword11, void *buffer, size_t buflen,
 		      u32 *result);

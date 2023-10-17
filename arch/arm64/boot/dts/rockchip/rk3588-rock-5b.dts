@@ -137,7 +137,7 @@
 	status = "okay";
 };
 
-&combphy2_psu {
+&sata1 {
 	status = "okay";
 };
 
@@ -272,7 +272,7 @@
 	pinctrl-0 = <&pcie2_0_rst>;
 	reset-gpios = <&gpio4 RK_PA5 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie2x1l0>;
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie2x1l2 {

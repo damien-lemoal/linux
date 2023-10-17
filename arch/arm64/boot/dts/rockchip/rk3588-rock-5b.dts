@@ -138,6 +138,10 @@
 	status = "okay";
 };
 
+&sata1 {
+	status = "okay";
+};
+
 &cpu_b0 {
 	cpu-supply = <&vdd_cpu_big0_s0>;
 };
@@ -269,7 +273,7 @@
 	pinctrl-0 = <&pcie2_0_rst>;
 	reset-gpios = <&gpio4 RK_PA5 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie2x1l0>;
-	status = "okay";
+	status = "disabled";
 };
 
 &pcie2x1l2 {

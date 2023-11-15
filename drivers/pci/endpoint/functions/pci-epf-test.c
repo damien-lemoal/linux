@@ -644,6 +644,8 @@ static void pci_epf_test_cmd_handler(struct work_struct *work)
 	if (!command)
 		goto reset_handler;
 
+	pr_err("%s CMD: %#x irq_type: %#x\n", __func__, command, reg->irq_type);
+
 	WRITE_ONCE(reg->command, 0);
 	WRITE_ONCE(reg->status, 0);
 
@@ -757,6 +759,8 @@ static int pci_epf_test_core_init(struct pci_epf *epf)
 	bool msi_capable = true;
 	int ret;
 
+	pr_err("%s\n", __func__);
+
 	epc_features = pci_epc_get_features(epc, epf->func_no, epf->vfunc_no);
 	if (epc_features) {
 		msix_capable = epc_features->msix_capable;
@@ -868,6 +872,13 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 		base = pci_epf_alloc_space(epf, bar_size[bar], bar,
 					   epc_features->align,
 					   PRIMARY_INTERFACE);
+
+		pr_err("pci: BAR: %d 64-bit ? %d requested size: %#lx virt: %px\n",
+		       bar,
+		       epf_bar->flags & PCI_BASE_ADDRESS_MEM_TYPE_64,
+		       bar_size[bar],
+		       base);
+
 		if (!base)
 			dev_err(dev, "Failed to allocate space for BAR%d\n",
 				bar);
@@ -922,6 +933,8 @@ static int pci_epf_test_bind(struct pci_epf *epf)
 
 	epf_test->test_reg_bar = test_reg_bar;
 	epf_test->epc_features = epc_features;
+
+	pr_err("%s using test_reg_bar: %#x\n", __func__, test_reg_bar);
 
 	ret = pci_epf_test_alloc_space(epf);
 	if (ret)

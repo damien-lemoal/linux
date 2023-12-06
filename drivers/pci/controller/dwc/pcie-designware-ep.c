@@ -707,31 +707,6 @@ static unsigned int dw_pcie_ep_find_ext_capability(struct dw_pcie *pci, int cap)
 	return 0;
 }
 
-#if 0
-/*
- * Return the capability which has CAP as the next cap
- */
-static unsigned int dw_pcie_ep_find_ext_capability_with_next(struct dw_pcie *pci, int cap)
-{
-	u32 header;
-	int pos = PCI_CFG_SPACE_SIZE;
-	int prev_pos = PCI_CFG_SPACE_SIZE;
-
-	while (pos) {
-		header = dw_pcie_readl_dbi(pci, pos);
-		if (PCI_EXT_CAP_ID(header) == cap)
-			return prev_pos;
-
-		prev_pos = pos;
-		pos = PCI_EXT_CAP_NEXT(header);
-		if (!pos)
-			break;
-	}
-
-	return 0;
-}
-#endif
-
 int dw_pcie_ep_init_complete(struct dw_pcie_ep *ep)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
@@ -772,23 +747,6 @@ int dw_pcie_ep_init_complete(struct dw_pcie_ep *ep)
 			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CAP),
 			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CTRL));
 		}
-	}
-#endif
-
-#if 0
-	if (offset) {
-		//if we have RESBAR, find the CAP that has RESBAR in next ptr
-		u32 cap_before_resbar_offset;
-		u32 cap_after_resbar_offset;
-		u32 header_cap_before_resbar;
-		u32 header_cap_resbar;
-		cap_before_resbar_offset = dw_pcie_ep_find_ext_capability_with_next(pci, PCI_EXT_CAP_ID_REBAR);
-		header_cap_before_resbar = dw_pcie_readl_dbi(pci, cap_before_resbar_offset);
-		header_cap_resbar = dw_pcie_readl_dbi(pci, offset);
-		cap_after_resbar_offset = PCI_EXT_CAP_NEXT(header_cap_resbar);
-		header_cap_before_resbar &= 0x000fffff;
-		header_cap_before_resbar |= (cap_after_resbar_offset << 20);
-		dw_pcie_writel_dbi(pci, cap_before_resbar_offset, header_cap_before_resbar);
 	}
 #endif
 

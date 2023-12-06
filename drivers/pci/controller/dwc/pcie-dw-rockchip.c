@@ -433,16 +433,39 @@ static irqreturn_t rockchip_pcie_sys_irq_handler(int irq, void *arg)
 	u32 val;
 
 	reg = rockchip_pcie_readl_apb(rockchip, PCIE_CLIENT_INTR_STATUS_MISC);
-	pr_err("pci: PCIE_CLIENT_INTR_STATUS_MISC: %#x\n", reg);
-	pr_err("LTSSM_STATUS: %#x\n",
+
+	pr_info("pci: PCIE_CLIENT_INTR_STATUS_MISC: %#x\n", reg);
+	pr_info("LTSSM_STATUS: %#x\n",
 	       rockchip_pcie_readl_apb(rockchip, PCIE_CLIENT_LTSSM_STATUS));
 
 	if (reg & BIT(2)) {
+		unsigned int offset, nbars;
+		int i;
+
 		val = rockchip_pcie_readl_apb(rockchip, PCIE_CLIENT_LTSSM_STATUS);
 		pr_err("pci: hot reset or link-down reset (LTSSM_STATUS: %#x)\n", val);
-		pr_err("pci: if you see this, then reboot the box with the RC\n");
-		pr_err("pci: all BAR addresses assigned by RC will be cleared\n");
-		pr_err("pci: and there is no way that the EP can restore them\n");
+
+		offset = dw_pcie_find_ext_capability(pci, PCI_EXT_CAP_ID_REBAR);
+		val = dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CTRL);
+		nbars = (val & PCI_REBAR_CTRL_NBAR_MASK) >>
+			PCI_REBAR_CTRL_NBAR_SHIFT;
+
+		//todo: clear them to same as fixed size?
+		//or drop fixed size...?
+		for (i = 0; i < nbars; i++, offset += PCI_REBAR_CTRL) {
+			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CTRL, 0x0); // clear, 1MB
+			pr_err("pci: BAR%d CAP: %#x CTRL: %#x\n",
+			       i,
+			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CAP),
+			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CTRL));
+		}
+
+		/* Setup command register */
+		val = dw_pcie_readl_dbi(pci, PCI_COMMAND);
+		val &= 0xffff0000;
+		val |= PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
+		       PCI_COMMAND_MASTER | PCI_COMMAND_SERR;
+		dw_pcie_writel_dbi(pci, PCI_COMMAND, val);
 	}
 
 	if (reg & PCIE_RDLH_LINK_UP_CHGED) {

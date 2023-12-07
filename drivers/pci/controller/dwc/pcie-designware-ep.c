@@ -330,6 +330,19 @@ static int dw_pcie_find_index(struct dw_pcie_ep *ep, phys_addr_t addr,
 	return -EINVAL;
 }
 
+static int dw_pcie_ep_map_info(struct pci_epc *epc, u8 fn, u8 vfn,
+			       struct pci_epc_map *map)
+{
+	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+
+	map->map_pci_addr = map->pci_addr & ~(pci->region_align - 1);
+	map->map_ofst = map->pci_addr & (pci->region_align - 1);
+	map->map_size = ALIGN(map->map_ofst + map->pci_size, pci->region_align);
+
+	return 0;
+}
+
 static void dw_pcie_ep_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 				  phys_addr_t addr)
 {
@@ -514,6 +527,7 @@ static const struct pci_epc_ops epc_ops = {
 	.write_header		= dw_pcie_ep_write_header,
 	.set_bar		= dw_pcie_ep_set_bar,
 	.clear_bar		= dw_pcie_ep_clear_bar,
+	.map_info		= dw_pcie_ep_map_info,
 	.map_addr		= dw_pcie_ep_map_addr,
 	.unmap_addr		= dw_pcie_ep_unmap_addr,
 	.set_msi		= dw_pcie_ep_set_msi,

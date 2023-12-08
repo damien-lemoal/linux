@@ -636,6 +636,8 @@ static int rockchip_pcie_probe(struct platform_device *pdev)
 		rockchip->pci.ep.ops = &rockchip_pcie_ep_ops;
 		rockchip->pci.ep.page_size = SZ_64K;
 
+		dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+
 		return dw_pcie_ep_init(&rockchip->pci.ep);
 	default:
 		dev_err(dev, "INVALID device type %d\n", rockchip->mode);

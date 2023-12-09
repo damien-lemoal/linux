@@ -12,6 +12,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/mutex.h>
 #include <linux/pci_ids.h>
 #include <linux/pci-epf.h>
 #include <linux/pci_regs.h>
@@ -191,6 +192,7 @@ struct pci_epf_nvme {
 
         bool				dma_supported;
         bool				dma_private;
+        struct mutex			dma_lock;
 	struct dma_chan			*dma_chan_tx;
         struct dma_chan			*dma_chan_rx;
 	struct device			*dma_dev;
@@ -276,6 +278,7 @@ static bool pci_epf_nvme_init_dma(struct pci_epf_nvme *epf_nvme)
 	dma_cap_mask_t mask;
 	int ret;
 
+	mutex_init(&epf_nvme->dma_lock);
 	epf_nvme->dma_dev = epf_nvme->epf->epc->dev.parent;
 
 	dma_cap_zero(mask);
@@ -371,7 +374,7 @@ static int pci_epf_nvme_dma(struct pci_epf_nvme *epf_nvme,
 	unsigned long time_left;
 	struct dma_chan *chan;
 	dma_addr_t dma_local;
-	int ret;
+	int ret = -EIO;
 
 	if (dir == DMA_MEM_TO_DEV) {
 		chan = epf_nvme->dma_chan_tx;
@@ -385,6 +388,8 @@ static int pci_epf_nvme_dma(struct pci_epf_nvme *epf_nvme,
 		return -EINVAL;
 	}
 
+	mutex_lock(&epf_nvme->dma_lock);
+
 	if (epf_nvme->dma_private) {
 		sconf.direction = dir;
 		if (dir == DMA_MEM_TO_DEV)
@@ -394,21 +399,21 @@ static int pci_epf_nvme_dma(struct pci_epf_nvme *epf_nvme,
 
 		if (dmaengine_slave_config(chan, &sconf)) {
 			dev_err(dev, "DMA slave config failed\n");
-			return -EIO;
+			goto terminate;
 		}
 
 		tx = dmaengine_prep_slave_single(chan, dma_local, len, dir,
 					DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
 		if (!tx) {
 			dev_err(dev, "dmaengine_prep_slave_single failed\n");
-			return -EIO;
+			goto terminate;
 		}
 	} else {
 		tx = dmaengine_prep_dma_memcpy(chan, dma_dst, dma_src, len,
 					DMA_CTRL_ACK | DMA_PREP_INTERRUPT);
 		if (!tx) {
 			dev_err(dev, "dmaengine_prep_dma_memcpy failed\n");
-			return -EIO;
+			goto terminate;
 		}
 	}
 
@@ -437,11 +442,16 @@ static int pci_epf_nvme_dma(struct pci_epf_nvme *epf_nvme,
 	if (dma.status != DMA_COMPLETE) {
 		dev_err(dev, "DMA transfer failed\n");
 		ret = -EIO;
+		goto terminate;
 	}
+
+	ret = 0;
 
 terminate:
 	if (ret)
 		dmaengine_terminate_sync(chan);
+
+	mutex_unlock(&epf_nvme->dma_lock);
 
 	return ret;
 }

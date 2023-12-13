@@ -621,9 +621,12 @@ static int rockchip_pcie_probe(struct platform_device *pdev)
 		pp->ops = &rockchip_pcie_host_ops;
 
 		ret = dw_pcie_host_init(pp);
-		if (!ret)
-			return 0;
-		break;
+		if (ret)
+			break;
+
+		dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+
+		return 0;
 	case DW_PCIE_EP_TYPE:
 		if (!IS_ENABLED(CONFIG_PCIE_ROCKCHIP_DW_EP)) {
 			ret = -ENODEV;

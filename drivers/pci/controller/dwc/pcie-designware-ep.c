@@ -78,13 +78,9 @@ static void __dw_pcie_ep_reset_bar(struct dw_pcie *pci, u8 func_no,
 	reg = func_offset + PCI_BASE_ADDRESS_0 + (4 * bar);
 	reg_dbi2 = dbi2_offset + PCI_BASE_ADDRESS_0 + (4 * bar);
 	dw_pcie_dbi_ro_wr_en(pci);
-	pr_err("pci: %s: writing 0 to BAR: %d (dbi2 + offset: %#x)\n",
-	       __func__, bar, reg_dbi2);
 	dw_pcie_writel_dbi2(pci, reg_dbi2, 0x0);
 	dw_pcie_writel_dbi(pci, reg, 0x0);
 	if (flags & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-		pr_err("pci: %s: 64-bit !!! writing 0 to BAR: %d (dbi2 + offset: %#x)\n",
-		       __func__, bar, reg_dbi2 + 4);
 		dw_pcie_writel_dbi2(pci, reg_dbi2 + 4, 0x0);
 		dw_pcie_writel_dbi(pci, reg + 4, 0x0);
 	}
@@ -182,7 +178,6 @@ static int dw_pcie_ep_inbound_atu(struct dw_pcie_ep *ep, u8 func_no, int type,
 	saved_atu = ep->bar_to_atu[bar];
 	if (!saved_atu) {
 		free_win = find_first_zero_bit(ep->ib_window_map, pci->num_ib_windows);
-		//pr_err("%s BAR: %d, found no ATU, using first free, index: %d\n", __func__, bar, free_win);
 		if (free_win >= pci->num_ib_windows) {
 			dev_err(pci->dev, "No free inbound window\n");
 			return -EINVAL;
@@ -195,7 +190,6 @@ static int dw_pcie_ep_inbound_atu(struct dw_pcie_ep *ep, u8 func_no, int type,
 		saved_atu = free_win + 1;
 	} else {
 		free_win = saved_atu - 1;
-		//pr_err("%s BAR: %d, already has ATU, index: %d\n", __func__, bar, free_win);
 	}
 
 	ret = dw_pcie_prog_ep_inbound_atu(pci, func_no, free_win, type,
@@ -244,9 +238,6 @@ static void dw_pcie_ep_clear_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	enum pci_barno bar = epf_bar->barno;
 	u32 atu_index = ep->bar_to_atu[bar];
 
-	pr_err("pci: %s: clearing BAR: %d, iATU index: %d\n",
-	       __func__, bar, atu_index);
-
 	__dw_pcie_ep_reset_bar(pci, func_no, bar, epf_bar->flags);
 
 	dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, atu_index);
@@ -266,8 +257,6 @@ static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	int flags = epf_bar->flags;
 	u32 reg, reg_dbi2;
 	int ret, type;
-
-	pr_err("%s: BAR: %d\n", __func__, bar);
 
 	func_offset = dw_pcie_ep_func_select(ep, func_no);
 	dbi2_offset = dw_pcie_ep_get_dbi2_offset(ep, func_no);
@@ -295,15 +284,10 @@ static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 
 	dw_pcie_dbi_ro_wr_en(pci);
 
-	//pr_err("pci: %s: writing %#x to BAR: %d (dbi2 + offset: %#x)\n",
-	//       __func__, lower_32_bits(size - 1), bar, reg_dbi2);
-	pr_err("%s: BAR%d_REG: %#x\n", __func__, bar, dw_pcie_readl_dbi(pci, reg));
 	dw_pcie_writel_dbi2(pci, reg_dbi2, lower_32_bits(size - 1));
 	dw_pcie_writel_dbi(pci, reg, flags);
 
 	if (flags & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-		//pr_err("pci: %s: 64-bit !!! writing %#x to BAR: %d (dbi2 + offset: %#x)\n",
-		//       __func__, upper_32_bits(size - 1), bar, reg_dbi2 + 4);
 		dw_pcie_writel_dbi2(pci, reg_dbi2 + 4, upper_32_bits(size - 1));
 		dw_pcie_writel_dbi(pci, reg + 4, 0);
 	}
@@ -735,17 +719,10 @@ int dw_pcie_ep_init_complete(struct dw_pcie_ep *ep)
 		reg = dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CTRL);
 		nbars = (reg & PCI_REBAR_CTRL_NBAR_MASK) >>
 			PCI_REBAR_CTRL_NBAR_SHIFT;
-		//pr_err("pci: found resizable BAR cap at: %#x nbars: %u\n", offset, nbars);
 
 		for (i = 0; i < nbars; i++, offset += PCI_REBAR_CTRL) {
-			//pr_err("pci: writing 0 to BAR%d CAP dbi + offset: %#x\n",
-			//       i, offset + PCI_REBAR_CAP);
-			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CAP, BIT(4)); // 1MB
-			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CTRL, 0x0); // clear, 1MB
-			pr_err("pci: BAR%d CAP: %#x CTRL: %#x\n",
-			       i,
-			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CAP),
-			       dw_pcie_readl_dbi(pci, offset + PCI_REBAR_CTRL));
+			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CAP, BIT(4));
+			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CTRL, 0x0);
 		}
 	}
 #endif

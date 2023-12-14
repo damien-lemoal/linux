@@ -477,9 +477,6 @@ static int __dw_pcie_prog_outbound_atu(struct dw_pcie *pci, u8 func_no,
 
 	limit_addr = cpu_addr + size - 1;
 
-	//pr_err("%s: pci_addr: %#llx size: %#llx limit_addr: %#llx cpu_addr %#llx region_limit: %#llx region_align: %#x\n",
-	//       __func__, pci_addr, size, limit_addr, cpu_addr, pci->region_limit, pci->region_align);
-
 	if ((limit_addr & ~pci->region_limit) != (cpu_addr & ~pci->region_limit) ||
 	    !IS_ALIGNED(cpu_addr, pci->region_align) ||
 	    !IS_ALIGNED(pci_addr, pci->region_align) || !size) {
@@ -619,10 +616,6 @@ int dw_pcie_prog_ep_inbound_atu(struct dw_pcie *pci, u8 func_no, int index,
 			      lower_32_bits(cpu_addr));
 	dw_pcie_writel_atu_ib(pci, index, PCIE_ATU_UPPER_TARGET,
 			      upper_32_bits(cpu_addr));
-
-	//pr_err("pci: %s: BAR: %u - using iATU index: %d func_no: %u setting to phys_addr: %#llx (lower: %#x upper: %#x)\n",
-	//       __func__, bar, index, func_no, cpu_addr, lower_32_bits(cpu_addr),
-	//       upper_32_bits(cpu_addr));
 
 	dw_pcie_writel_atu_ib(pci, index, PCIE_ATU_REGION_CTRL1, type |
 			      PCIE_ATU_FUNC_NUM(func_no));

@@ -115,7 +115,7 @@
 				<0 0 0 3 &pcie3x4_intc 2>,
 				<0 0 0 4 &pcie3x4_intc 3>;
 		linux,pci-domain = <0>;
-		max-link-speed = <3>;
+		max-link-speed = <2>;
 		msi-map = <0x0000 &its1 0x0000 0x1000>;
 		num-lanes = <4>;
 		phys = <&pcie30phy>;
@@ -160,7 +160,7 @@
 			     <GIC_SPI 270 IRQ_TYPE_LEVEL_HIGH 0>;
 		interrupt-names = "sys", "pmc", "msg", "err",
 				  "dma0", "dma1", "dma2", "dma3";
-		max-link-speed = <3>;
+		max-link-speed = <2>;
 		num-lanes = <4>;
 		phys = <&pcie30phy>;
 		phy-names = "pcie-phy";

@@ -242,7 +242,7 @@
 				<0 0 0 2 &pcie0_intc 1>,
 				<0 0 0 3 &pcie0_intc 2>,
 				<0 0 0 4 &pcie0_intc 3>;
-		max-link-speed = <2>;
+		max-link-speed = <1>;
 		msi-map = <0x0 &its 0x0 0x1000>;
 		phys = <&pcie_phy 0>, <&pcie_phy 1>,
 		       <&pcie_phy 2>, <&pcie_phy 3>;
@@ -276,7 +276,7 @@
 			      "hclk", "pm";
 		max-functions = /bits/ 8 <8>;
 		num-lanes = <4>;
-		max-link-speed = <2>;
+		max-link-speed = <1>;
 		resets = <&cru SRST_PCIE_CORE>, <&cru SRST_PCIE_MGMT>,
 			 <&cru SRST_PCIE_MGMT_STICKY>, <&cru SRST_PCIE_PIPE>,
 			 <&cru SRST_PCIE_PM>, <&cru SRST_P_PCIE>,

@@ -691,8 +691,23 @@ int dw_pcie_ep_init_complete(struct dw_pcie_ep *ep)
 		nbars = (reg & PCI_REBAR_CTRL_NBAR_MASK) >>
 			PCI_REBAR_CTRL_NBAR_SHIFT;
 
-		for (i = 0; i < nbars; i++, offset += PCI_REBAR_CTRL)
-			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CAP, 0x0);
+		for (i = 0; i < nbars; i++, offset += PCI_REBAR_CTRL) {
+			/*
+			 * Bits 0-31 in REBAR_CAP advertizes support for BAR
+			 * sizes up to 128 TB. Advertize support for 1 MB BAR
+			 * size only.
+			 */
+			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CAP, BIT(4));
+
+			/*
+			 * Bits 16-32 in REBAR_CTRL advertizes support for BAR
+			 * sizes above 128 TB. Bits 8-13 indicate the currently
+			 * selected BAR size, where all zeroes indicates the
+			 * smallest supported BAR size (1 MB). Bits 0-2 and 5-7
+			 * are read-only. Thus, write zeroes to the whole reg.
+			 */
+			dw_pcie_writel_dbi(pci, offset + PCI_REBAR_CTRL, 0x0);
+		}
 	}
 
 	/*

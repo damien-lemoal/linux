@@ -372,8 +372,12 @@
 		compatible = "rockchip,rk3588-pcie3-phy";
 		reg = <0x0 0xfee80000 0x0 0x20000>;
 		#phy-cells = <0>;
-		clocks = <&cru PCLK_PCIE_COMBO_PIPE_PHY>;
-		clock-names = "pclk";
+		clocks = <&cru PCLK_PCIE_COMBO_PIPE_PHY>, <&cru CLK_PHY0_REF_ALT_P>,
+			 <&cru CLK_PHY0_REF_ALT_M>, <&cru CLK_PHY1_REF_ALT_P>,
+			 <&cru CLK_PHY1_REF_ALT_M>;
+		clock-names = "pclk", "phy0_ref_alt_p",
+			      "phy0_ref_alt_m", "phy1_ref_alt_p",
+			      "phy1_ref_alt_m";
 		resets = <&cru SRST_PCIE30_PHY>;
 		reset-names = "phy";
 		rockchip,pipe-grf = <&php_grf>;

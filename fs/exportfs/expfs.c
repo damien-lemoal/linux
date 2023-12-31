@@ -255,9 +255,7 @@ static bool filldir_one(struct dir_context *ctx, const char *name, int len,
 		container_of(ctx, struct getdents_callback, ctx);
 
 	buf->sequence++;
-	/* Ignore the '.' and '..' entries */
-	if ((len > 2 || name[0] != '.' || (len == 2 && name[1] != '.')) &&
-	    buf->ino == ino && len <= NAME_MAX) {
+	if (buf->ino == ino && len <= NAME_MAX && !is_dot_dotdot(name, len)) {
 		memcpy(buf->name, name, len);
 		buf->name[len] = '\0';
 		buf->found = 1;

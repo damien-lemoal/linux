@@ -179,11 +179,11 @@ static void __flush_svm_range_dev(struct intel_svm *svm,
 	if (WARN_ON(!pages))
 		return;
 
-	qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, address, pages, ih);
+	qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, address, pages, ih, NULL);
 	if (info->ats_enabled) {
 		qi_flush_dev_iotlb_pasid(sdev->iommu, sdev->sid, info->pfsid,
 					 svm->pasid, sdev->qdep, address,
-					 order_base_2(pages));
+					 order_base_2(pages), NULL);
 		quirk_extra_dev_tlb_flush(info, address, order_base_2(pages),
 					  svm->pasid, sdev->qdep);
 	}
@@ -225,11 +225,11 @@ static void intel_flush_svm_all(struct intel_svm *svm)
 	list_for_each_entry_rcu(sdev, &svm->devs, list) {
 		info = dev_iommu_priv_get(sdev->dev);
 
-		qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, 0, -1UL, 0);
+		qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, 0, -1UL, 0, NULL);
 		if (info->ats_enabled) {
 			qi_flush_dev_iotlb_pasid(sdev->iommu, sdev->sid, info->pfsid,
 						 svm->pasid, sdev->qdep,
-						 0, 64 - VTD_PAGE_SHIFT);
+						 0, 64 - VTD_PAGE_SHIFT, NULL);
 			quirk_extra_dev_tlb_flush(info, 0, 64 - VTD_PAGE_SHIFT,
 						  svm->pasid, sdev->qdep);
 		}

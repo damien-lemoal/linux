@@ -9,6 +9,16 @@ soc/arm
 		git://git.kernel.org/pub/scm/linux/kernel/git/gclement/mvebu tags/mvebu-arm-6.8-1
 	patch
 		ARM: Delete ARM11MPCore (ARM11 ARMv6K SMP) support
+		ARM: Kconfig: move platform selection into its own Kconfig file
+		ARM: mach-asm9260: Move ASM9260 support into Kconfig.platforms
+		ARM: mach-rda: Move RDA Micro support into Kconfig.platforms
+		ARM: mach-uniphier: Move Socionext UniPhier support into Kconfig.platforms
+		ARM: mach-moxart: Move MOXA ART support into Kconfig.platforms
+		ARM: mach-airoha: Rework support and directory structure
+		ARM: mach-sunplus: Rework support and directory structure
+		ARM: mach-nspire: Rework support and directory structure
+		ARM: Delete ARM11MPCore perf leftovers
+		ARM: MAINTAINERS: drop empty entries for removed boards
 
 soc/dt
 	renesas/dt
@@ -68,6 +78,18 @@ soc/dt
 	qcom/dt64
 		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-6.8
 		contains qcom/dt-2
+	unisoc/dt
+		https://github.com/lyrazhang/linux tags/sprd-dt-6.8-rc1
+	broadcom/dt
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-6.8/devicetree
+	qcom/dt32-3
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm32-for-6.8-2
+	qcom/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-6.8-2
+	rockchip/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.8-rockchip-dts64-2
+	rockchip/dt32-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.8-rockchip-dts32-2
 
 soc/drivers
 	asahi/soc
@@ -134,10 +156,16 @@ soc/defconfig
 		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-6.8
 	patch
 		ARM: multi_v7_defconfig: enable STM32 DCMIPP media support
+		ARM: multi_v7_defconfig: Enable RPMSG CHAR and CTRL
+	<no branch> (191fcf77e304392cc330fc19595cb90fd52d595f)
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-6.8-2
 
 soc/late
 
 arm/fixes
+	patch
+		ARM: sun9i: smp: Fix array-index-out-of-bounds read in sunxi_mc_smp_init
+		ARM: sun9i: smp: fix return code check of of_property_match_string
 
 soc/dt-late
 	qcom/dt-2

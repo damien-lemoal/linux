@@ -148,4 +148,38 @@ struct iommu_hwpt_selftest {
 	__u32 iotlb;
 };
 
+/* Should not be equal to any defined value in enum iommu_hwpt_invalidate_data_type */
+#define IOMMU_HWPT_INVALIDATE_DATA_SELFTEST 0xdeadbeef
+#define IOMMU_HWPT_INVALIDATE_DATA_SELFTEST_INVALID 0xdadbeef
+
+/**
+ * enum iommu_hwpt_invalidate_selftest_error - Hardware error of invalidation
+ * @IOMMU_TEST_INVALIDATE_FAKE_ERROR: Fake hw error per test program's request
+ */
+enum iommu_hwpt_invalidate_selftest_error {
+	IOMMU_TEST_INVALIDATE_FAKE_ERROR = (1 << 0)
+};
+
+/**
+ * struct iommu_hwpt_invalidate_selftest - Invalidation data for Mock driver
+ *                                         (IOMMU_HWPT_INVALIDATE_DATA_SELFTEST)
+ * @flags: Invalidate flags
+ * @iotlb_id: Invalidate iotlb entry index
+ * @hw_error: One of enum iommu_hwpt_invalidate_selftest_error
+ * @__reserved: Must be 0
+ *
+ * If IOMMU_TEST_INVALIDATE_ALL is set in @flags, @iotlb_id will be ignored
+ * @hw_error meaningful only if the request is processed successfully.
+ * If IOMMU_TEST_INVALIDATE_FLAG_TRIGGER_ERROR is set in @flags, report a
+ * hw error back, cache would not be invalidated in this case.
+ */
+struct iommu_hwpt_invalidate_selftest {
+#define IOMMU_TEST_INVALIDATE_FLAG_ALL	(1 << 0)
+#define IOMMU_TEST_INVALIDATE_FLAG_TRIGGER_ERROR	(1 << 1)
+	__u32 flags;
+	__u32 iotlb_id;
+	__u32 hw_error;
+	__u32 __reserved;
+};
+
 #endif

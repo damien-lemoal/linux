@@ -1529,7 +1529,7 @@ void qi_flush_iotlb(struct intel_iommu *iommu, u16 did, u64 addr,
 }
 
 void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			u16 qdep, u64 addr, unsigned mask)
+			u16 qdep, u64 addr, unsigned mask, u32 *fault)
 {
 	struct qi_desc desc;
 
@@ -1556,12 +1556,12 @@ void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 	desc.qw2 = 0;
 	desc.qw3 = 0;
 
-	qi_submit_sync(iommu, &desc, 1, 0, NULL);
+	qi_submit_sync(iommu, &desc, 1, 0, fault);
 }
 
 /* PASID-based IOTLB invalidation */
 void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
-		     unsigned long npages, bool ih)
+		     unsigned long npages, bool ih, u32 *fault)
 {
 	struct qi_desc desc = {.qw2 = 0, .qw3 = 0};
 
@@ -1597,12 +1597,13 @@ void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
 				QI_EIOTLB_AM(mask);
 	}
 
-	qi_submit_sync(iommu, &desc, 1, 0, NULL);
+	qi_submit_sync(iommu, &desc, 1, 0, fault);
 }
 
 /* PASID-based device IOTLB Invalidate */
 void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
-			      u32 pasid,  u16 qdep, u64 addr, unsigned int size_order)
+			      u32 pasid,  u16 qdep, u64 addr,
+			      unsigned int size_order, u32 *fault)
 {
 	unsigned long mask = 1UL << (VTD_PAGE_SHIFT + size_order - 1);
 	struct qi_desc desc = {.qw1 = 0, .qw2 = 0, .qw3 = 0};
@@ -1650,7 +1651,7 @@ void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 		desc.qw1 |= QI_DEV_EIOTLB_SIZE;
 	}
 
-	qi_submit_sync(iommu, &desc, 1, 0, NULL);
+	qi_submit_sync(iommu, &desc, 1, 0, fault);
 }
 
 void qi_flush_pasid_cache(struct intel_iommu *iommu, u16 did,

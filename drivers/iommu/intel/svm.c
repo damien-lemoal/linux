@@ -179,11 +179,11 @@ static void __flush_svm_range_dev(struct intel_svm *svm,
 	if (WARN_ON(!pages))
 		return;
 
-	qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, address, pages, ih);
+	qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, address, pages, ih, NULL);
 	if (info->ats_enabled) {
 		qi_flush_dev_iotlb_pasid(sdev->iommu, sdev->sid, info->pfsid,
 					 svm->pasid, sdev->qdep, address,
-					 order_base_2(pages));
+					 order_base_2(pages), NULL);
 		quirk_extra_dev_tlb_flush(info, address, order_base_2(pages),
 					  svm->pasid, sdev->qdep);
 	}
@@ -225,11 +225,11 @@ static void intel_flush_svm_all(struct intel_svm *svm)
 	list_for_each_entry_rcu(sdev, &svm->devs, list) {
 		info = dev_iommu_priv_get(sdev->dev);
 
-		qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, 0, -1UL, 0);
+		qi_flush_piotlb(sdev->iommu, sdev->did, svm->pasid, 0, -1UL, 0, NULL);
 		if (info->ats_enabled) {
 			qi_flush_dev_iotlb_pasid(sdev->iommu, sdev->sid, info->pfsid,
 						 svm->pasid, sdev->qdep,
-						 0, 64 - VTD_PAGE_SHIFT);
+						 0, 64 - VTD_PAGE_SHIFT, NULL);
 			quirk_extra_dev_tlb_flush(info, 0, 64 - VTD_PAGE_SHIFT,
 						  svm->pasid, sdev->qdep);
 		}
@@ -539,7 +539,7 @@ prq_retry:
 			QI_DEV_IOTLB_PFSID(info->pfsid);
 qi_retry:
 	reinit_completion(&iommu->prq_complete);
-	qi_submit_sync(iommu, desc, 3, QI_OPT_WAIT_DRAIN);
+	qi_submit_sync(iommu, desc, 3, QI_OPT_WAIT_DRAIN, NULL);
 	if (readl(iommu->reg + DMAR_PRS_REG) & DMA_PRS_PRO) {
 		wait_for_completion(&iommu->prq_complete);
 		goto qi_retry;
@@ -642,7 +642,7 @@ static void handle_bad_prq_event(struct intel_iommu *iommu,
 		desc.qw3 = 0;
 	}
 
-	qi_submit_sync(iommu, &desc, 1, 0);
+	qi_submit_sync(iommu, &desc, 1, 0, NULL);
 }
 
 static irqreturn_t prq_event_thread(int irq, void *d)
@@ -798,7 +798,7 @@ int intel_svm_page_response(struct device *dev,
 				ktime_to_ns(ktime_get()) - prm->private_data[0]);
 		}
 
-		qi_submit_sync(iommu, &desc, 1, 0);
+		qi_submit_sync(iommu, &desc, 1, 0, NULL);
 	}
 out:
 	return ret;

@@ -2986,26 +2986,38 @@ void blk_mq_submit_bio(struct bio *bio)
 		}
 		if (!bio_integrity_prep(bio))
 			return;
+		if (blk_queue_is_zoned(q) && blk_zone_write_plug_bio(bio))
+			return;
 		if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
 			return;
 		if (blk_mq_use_cached_rq(rq, plug, bio))
 			goto done;
 		percpu_ref_get(&q->q_usage_counter);
 	} else {
-		if (unlikely(bio_queue_enter(bio)))
-			return;
+		/*
+		 * If it is a BIO that went through a zone plug, we already have
+		 * an extra reference on the queue usage.
+		 */
+		if (!bio_zone_write_plugging(bio)) {
+			if (unlikely(bio_queue_enter(bio)))
+				return;
+		}
 		if (unlikely(bio_may_exceed_limits(bio, &q->limits))) {
 			bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 			if (!bio)
-				goto fail;
+				goto qexit;
 		}
 		if (!bio_integrity_prep(bio))
-			goto fail;
+			goto qexit;
+		if (blk_queue_is_zoned(q) && blk_zone_write_plug_bio(bio)) {
+			/* Keep the queue usage counter reference */
+			return;
+		}
 	}
 
 	rq = blk_mq_get_new_requests(q, plug, bio, nr_segs);
 	if (unlikely(!rq)) {
-fail:
+qexit:
 		blk_queue_exit(q);
 		return;
 	}

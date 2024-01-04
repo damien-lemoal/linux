@@ -377,7 +377,12 @@ struct bio *__bio_split_to_limits(struct bio *bio,
 		blkcg_bio_issue_init(split);
 		bio_chain(split, bio);
 		trace_block_split(split, bio->bi_iter.bi_sector);
-		submit_bio_noacct(bio);
+
+		/* Re-plug zone writes instead of issuing them. */
+		if (!bio_zone_write_plugging(bio))
+			submit_bio_noacct(bio);
+		else
+			blk_zone_write_plug_split_bio(bio, split);
 		return split;
 	}
 	return bio;

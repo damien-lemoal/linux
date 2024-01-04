@@ -39,6 +39,7 @@ struct rq_qos;
 struct blk_queue_stats;
 struct blk_stat_callback;
 struct blk_crypto_profile;
+struct blk_zone_wplug;
 
 extern const struct device_type disk_type;
 extern const struct device_type part_type;
@@ -193,6 +194,9 @@ struct gendisk {
 	unsigned int		zone_capacity;
 	unsigned long		*conv_zones_bitmap;
 	unsigned long		*seq_zones_wlock;
+	struct xarray		zone_wplugs;
+	atomic_t		zone_nr_wplugs_with_error;
+	struct delayed_work	zone_wplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 #if IS_ENABLED(CONFIG_CDROM)
@@ -662,6 +666,7 @@ static inline unsigned int bdev_max_active_zones(struct block_device *bdev)
 	return bdev->bd_disk->queue->limits.max_active_zones;
 }
 
+bool blk_zone_write_plug_bio(struct bio *bio, unsigned int nr_segs);
 #else /* CONFIG_BLK_DEV_ZONED */
 static inline unsigned int bdev_nr_zones(struct block_device *bdev)
 {
@@ -688,6 +693,11 @@ static inline unsigned int bdev_max_open_zones(struct block_device *bdev)
 static inline unsigned int bdev_max_active_zones(struct block_device *bdev)
 {
 	return 0;
+}
+static inline bool blk_zone_write_plug_bio(struct bio *bio,
+					   unsigned int nr_segs)
+{
+	return false;
 }
 #endif /* CONFIG_BLK_DEV_ZONED */
 

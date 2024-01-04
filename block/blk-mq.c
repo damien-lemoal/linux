@@ -2984,12 +2984,19 @@ void blk_mq_submit_bio(struct bio *bio)
 	 * If the plug has a cached request for this queue, try use it.
 	 *
 	 * The cached request already holds a q_usage_counter reference and we
-	 * don't have to acquire a new one if we use it.
+	 * don't have to acquire a new one if we use it. Similarly, BIOs that
+	 * already went through zone write plugging also hold a reference, so do
+	 * not aquire a new reference for that case either and drop that extra
+	 * reference if we use the cached request.
 	 */
 	rq = blk_mq_peek_cached_request(plug, q, bio->bi_opf);
-	if (!rq) {
-		if (unlikely(bio_queue_enter(bio)))
-			return;
+	if (!bio_zone_write_plugging(bio)) {
+		if (!rq) {
+			if (unlikely(bio_queue_enter(bio)))
+				return;
+		}
+	} else if (rq) {
+		blk_queue_exit(q);
 	}
 
 	if (unlikely(bio_may_exceed_limits(bio, &q->limits))) {
@@ -3001,6 +3008,9 @@ void blk_mq_submit_bio(struct bio *bio)
 		goto queue_exit;
 
 	if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
+		goto queue_exit;
+
+	if (blk_queue_is_zoned(q) && blk_zone_write_plug_bio(bio))
 		goto queue_exit;
 
 	if (!rq) {

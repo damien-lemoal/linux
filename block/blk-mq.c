@@ -2986,6 +2986,8 @@ void blk_mq_submit_bio(struct bio *bio)
 		}
 		if (!bio_integrity_prep(bio))
 			return;
+		if (blk_queue_is_zoned(q) && blk_zone_write_plug_bio(bio))
+			return;
 		if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
 			return;
 		if (blk_mq_use_cached_rq(rq, plug, bio))
@@ -2997,15 +2999,17 @@ void blk_mq_submit_bio(struct bio *bio)
 		if (unlikely(bio_may_exceed_limits(bio, &q->limits))) {
 			bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 			if (!bio)
-				goto fail;
+				goto qexit;
 		}
 		if (!bio_integrity_prep(bio))
-			goto fail;
+			goto qexit;
+		if (blk_queue_is_zoned(q) && blk_zone_write_plug_bio(bio))
+			return;
 	}
 
 	rq = blk_mq_get_new_requests(q, plug, bio, nr_segs);
 	if (unlikely(!rq)) {
-fail:
+qexit:
 		blk_queue_exit(q);
 		return;
 	}

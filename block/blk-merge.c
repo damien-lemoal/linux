@@ -354,6 +354,12 @@ struct bio *__bio_split_to_limits(struct bio *bio,
 	struct bio_set *bs = &bio->bi_bdev->bd_disk->bio_split;
 	struct bio *split;
 
+	/*
+	 * BIOs that require zone write plugging must be split before
+	 * going through the zone write plug.
+	 */
+	WARN_ON_ONCE(bio_zone_write_plugging(bio));
+
 	switch (bio_op(bio)) {
 	case REQ_OP_DISCARD:
 	case REQ_OP_SECURE_ERASE:
@@ -377,6 +383,7 @@ struct bio *__bio_split_to_limits(struct bio *bio,
 		blkcg_bio_issue_init(split);
 		bio_chain(split, bio);
 		trace_block_split(split, bio->bi_iter.bi_sector);
+
 		submit_bio_noacct(bio);
 		return split;
 	}

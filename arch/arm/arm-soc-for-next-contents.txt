@@ -90,6 +90,8 @@ soc/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.8-rockchip-dts64-2
 	rockchip/dt32-2
 		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.8-rockchip-dts32-2
+	socfpga/dt-fixes
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_updates_for_v6.8
 
 soc/drivers
 	asahi/soc

@@ -182,7 +182,7 @@ int null_register_zoned_dev(struct nullb *nullb)
 		queue_emulates_zone_append(q) ? "emulated" : "native");
 
 	if (queue_is_mq(q) || queue_emulates_zone_append(q))
-		return blk_revalidate_disk_zones(disk, NULL);
+		return blk_revalidate_disk_zones(disk);
 
 	return 0;
 }

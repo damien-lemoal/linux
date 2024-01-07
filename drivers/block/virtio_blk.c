@@ -788,7 +788,7 @@ static int virtblk_probe_zoned_device(struct virtio_device *vdev,
 	blk_queue_max_zone_append_sectors(q, v);
 	dev_dbg(&vdev->dev, "max append sectors = %u\n", v);
 
-	return blk_revalidate_disk_zones(vblk->disk, NULL);
+	return blk_revalidate_disk_zones(vblk->disk);
 }
 
 #else

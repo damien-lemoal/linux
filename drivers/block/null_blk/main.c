@@ -241,6 +241,11 @@ static unsigned int g_zone_max_active;
 module_param_named(zone_max_active, g_zone_max_active, uint, 0444);
 MODULE_PARM_DESC(zone_max_active, "Maximum number of active zones when block device is zoned. Default: 0 (no limit)");
 
+static int g_zone_append_max_sectors = INT_MAX;
+module_param_named(zone_append_max_sectors, g_zone_append_max_sectors, int, 0444);
+MODULE_PARM_DESC(zone_append_max_sectors,
+		 "Maximum size of a zone append command (in 512B sectors). Specify 0 for zone append emulation");
+
 static struct nullb_device *null_alloc_dev(void);
 static void null_free_dev(struct nullb_device *dev);
 static void null_del_dev(struct nullb *nullb);
@@ -424,6 +429,7 @@ NULLB_DEVICE_ATTR(zone_capacity, ulong, NULL);
 NULLB_DEVICE_ATTR(zone_nr_conv, uint, NULL);
 NULLB_DEVICE_ATTR(zone_max_open, uint, NULL);
 NULLB_DEVICE_ATTR(zone_max_active, uint, NULL);
+NULLB_DEVICE_ATTR(zone_append_max_sectors, uint, NULL);
 NULLB_DEVICE_ATTR(virt_boundary, bool, NULL);
 NULLB_DEVICE_ATTR(no_sched, bool, NULL);
 NULLB_DEVICE_ATTR(shared_tag_bitmap, bool, NULL);
@@ -567,6 +573,7 @@ static struct configfs_attribute *nullb_device_attrs[] = {
 	&nullb_device_attr_zone_nr_conv,
 	&nullb_device_attr_zone_max_open,
 	&nullb_device_attr_zone_max_active,
+	&nullb_device_attr_zone_append_max_sectors,
 	&nullb_device_attr_zone_readonly,
 	&nullb_device_attr_zone_offline,
 	&nullb_device_attr_virt_boundary,
@@ -656,7 +663,8 @@ static ssize_t memb_group_features_show(struct config_item *item, char *page)
 			"poll_queues,power,queue_mode,shared_tag_bitmap,size,"
 			"submit_queues,use_per_node_hctx,virt_boundary,zoned,"
 			"zone_capacity,zone_max_active,zone_max_open,"
-			"zone_nr_conv,zone_offline,zone_readonly,zone_size\n");
+			"zone_nr_conv,zone_offline,zone_readonly,zone_size,"
+			"zone_append_max_sectors\n");
 }
 
 CONFIGFS_ATTR_RO(memb_group_, features);
@@ -736,6 +744,7 @@ static struct nullb_device *null_alloc_dev(void)
 	dev->zone_nr_conv = g_zone_nr_conv;
 	dev->zone_max_open = g_zone_max_open;
 	dev->zone_max_active = g_zone_max_active;
+	dev->zone_append_max_sectors = g_zone_append_max_sectors;
 	dev->virt_boundary = g_virt_boundary;
 	dev->no_sched = g_no_sched;
 	dev->shared_tag_bitmap = g_shared_tag_bitmap;
@@ -1528,12 +1537,15 @@ static struct nullb_queue *nullb_to_queue(struct nullb *nullb)
 
 static void null_submit_bio(struct bio *bio)
 {
-	sector_t sector = bio->bi_iter.bi_sector;
-	sector_t nr_sectors = bio_sectors(bio);
-	struct nullb *nullb = bio->bi_bdev->bd_disk->private_data;
-	struct nullb_queue *nq = nullb_to_queue(nullb);
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+	struct nullb_queue *nq = nullb_to_queue(disk->private_data);
 
-	null_handle_cmd(alloc_cmd(nq, bio), sector, nr_sectors, bio_op(bio));
+	if (queue_emulates_zone_append(disk->queue) &&
+	    blk_zone_write_plug_bio(bio))
+		return;
+
+	null_handle_cmd(alloc_cmd(nq, bio), bio->bi_iter.bi_sector,
+			bio_sectors(bio), bio_op(bio));
 }
 
 #ifdef CONFIG_BLK_DEV_NULL_BLK_FAULT_INJECTION
@@ -2164,12 +2176,6 @@ static int null_add_dev(struct nullb_device *dev)
 		blk_queue_write_cache(nullb->q, true, true);
 	}
 
-	if (dev->zoned) {
-		rv = null_init_zoned_dev(dev, nullb->q);
-		if (rv)
-			goto out_cleanup_disk;
-	}
-
 	nullb->q->queuedata = nullb;
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, nullb->q);
 
@@ -2177,7 +2183,7 @@ static int null_add_dev(struct nullb_device *dev)
 	rv = ida_alloc(&nullb_indexes, GFP_KERNEL);
 	if (rv < 0) {
 		mutex_unlock(&lock);
-		goto out_cleanup_zone;
+		goto out_cleanup_disk;
 	}
 	nullb->index = rv;
 	dev->index = rv;
@@ -2191,6 +2197,12 @@ static int null_add_dev(struct nullb_device *dev)
 	if (dev->virt_boundary)
 		blk_queue_virt_boundary(nullb->q, PAGE_SIZE - 1);
 
+	if (dev->zoned) {
+		rv = null_init_zoned_dev(dev, nullb->q);
+		if (rv)
+			goto out_ida_free;
+	}
+
 	null_config_discard(nullb);
 
 	if (config_item_name(&dev->group.cg_item)) {
@@ -2203,7 +2215,7 @@ static int null_add_dev(struct nullb_device *dev)
 
 	rv = null_gendisk_register(nullb);
 	if (rv)
-		goto out_ida_free;
+		goto out_cleanup_zone;
 
 	mutex_lock(&lock);
 	list_add_tail(&nullb->list, &nullb_list);
@@ -2213,10 +2225,10 @@ static int null_add_dev(struct nullb_device *dev)
 
 	return 0;
 
-out_ida_free:
-	ida_free(&nullb_indexes, nullb->index);
 out_cleanup_zone:
 	null_free_zoned_dev(dev);
+out_ida_free:
+	ida_free(&nullb_indexes, nullb->index);
 out_cleanup_disk:
 	put_disk(nullb->disk);
 out_cleanup_tags:

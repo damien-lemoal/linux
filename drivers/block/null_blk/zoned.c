@@ -61,6 +61,7 @@ static inline void null_unlock_zone(struct nullb_device *dev,
 int null_init_zoned_dev(struct nullb_device *dev, struct request_queue *q)
 {
 	sector_t dev_capacity_sects, zone_capacity_sects;
+	sector_t zone_append_max_bytes;
 	struct nullb_zone *zone;
 	sector_t sector = 0;
 	unsigned int i;
@@ -101,6 +102,14 @@ int null_init_zoned_dev(struct nullb_device *dev, struct request_queue *q)
 		pr_info("changed the number of conventional zones to %u",
 			dev->zone_nr_conv);
 	}
+
+	dev->zone_append_max_sectors =
+		min(dev->zone_append_max_sectors, queue_max_sectors(q));
+	zone_append_max_bytes =
+		ALIGN_DOWN(dev->zone_append_max_sectors << SECTOR_SHIFT,
+			   dev->blocksize);
+	dev->zone_append_max_sectors =
+		min(zone_append_max_bytes >> SECTOR_SHIFT, zone_capacity_sects);
 
 	/* Max active zones has to be < nbr of seq zones in order to be enforceable */
 	if (dev->zone_max_active >= dev->nr_zones - dev->zone_nr_conv) {
@@ -158,17 +167,22 @@ int null_register_zoned_dev(struct nullb *nullb)
 {
 	struct nullb_device *dev = nullb->dev;
 	struct request_queue *q = nullb->q;
+	struct gendisk *disk = nullb->disk;
 
-	disk_set_zoned(nullb->disk);
+	disk_set_zoned(disk);
 	blk_queue_flag_set(QUEUE_FLAG_ZONE_RESETALL, q);
 	blk_queue_chunk_sectors(q, dev->zone_size_sects);
-	nullb->disk->nr_zones = bdev_nr_zones(nullb->disk->part0);
-	blk_queue_max_zone_append_sectors(q, dev->zone_size_sects);
-	disk_set_max_open_zones(nullb->disk, dev->zone_max_open);
-	disk_set_max_active_zones(nullb->disk, dev->zone_max_active);
+	disk->nr_zones = bdev_nr_zones(disk->part0);
+	blk_queue_max_zone_append_sectors(q, dev->zone_append_max_sectors);
+	disk_set_max_open_zones(disk, dev->zone_max_open);
+	disk_set_max_active_zones(disk, dev->zone_max_active);
 
-	if (queue_is_mq(q))
-		return blk_revalidate_disk_zones(nullb->disk, NULL);
+	pr_info("%s: using %s zone append\n",
+		disk->disk_name,
+		queue_emulates_zone_append(q) ? "emulated" : "native");
+
+	if (queue_is_mq(q) || queue_emulates_zone_append(q))
+		return blk_revalidate_disk_zones(disk, NULL);
 
 	return 0;
 }
@@ -368,6 +382,9 @@ static blk_status_t null_zone_write(struct nullb_cmd *cmd, sector_t sector,
 	blk_status_t ret;
 
 	trace_nullb_zone_op(cmd, zno, zone->cond);
+
+	if (WARN_ON_ONCE(append && !dev->zone_append_max_sectors))
+		return BLK_STS_IOERR;
 
 	if (zone->type == BLK_ZONE_TYPE_CONVENTIONAL) {
 		if (append)

@@ -583,7 +583,7 @@ int sd_zbc_revalidate_zones(struct scsi_disk *sdkp)
 	/* Enable block layer zone append emulation */
 	blk_queue_max_zone_append_sectors(q, 0);
 
-	ret = blk_revalidate_disk_zones(disk, NULL);
+	ret = blk_revalidate_disk_zones(disk);
 
 	memalloc_noio_restore(flags);
 

@@ -14,7 +14,7 @@ int nvme_revalidate_zones(struct nvme_ns *ns)
 	blk_queue_chunk_sectors(q, ns->head->zsze);
 	blk_queue_max_zone_append_sectors(q, ns->ctrl->max_zone_append);
 
-	return blk_revalidate_disk_zones(ns->disk, NULL);
+	return blk_revalidate_disk_zones(ns->disk);
 }
 
 static int nvme_set_max_append(struct nvme_ctrl *ctrl)

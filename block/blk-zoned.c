@@ -1038,8 +1038,8 @@ void blk_zone_write_plug_complete_request(struct request *req)
 		blk_zone_wplug_unlock(zwplug, flags);
 		kblockd_mod_delayed_work_on(WORK_CPU_UNBOUND,
 					    &disk->zone_wplugs_work, 0);
-                return;
-        }
+		return;
+	}
 
 	/* Schedule submission of the next plugged BIO. */
 	if (!bio_list_empty(&zwplug->bio_list))

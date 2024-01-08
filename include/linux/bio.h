@@ -602,6 +602,16 @@ static inline void bio_list_add_head(struct bio_list *bl, struct bio *bio)
 		bl->tail = bio;
 }
 
+static inline void bio_list_add_after(struct bio_list *bl,
+				      struct bio *bio, struct bio *pos)
+{
+	bio->bi_next = pos->bi_next;
+	pos->bi_next = bio;
+
+	if (bl->tail == pos)
+		bl->tail = bio;
+}
+
 static inline void bio_list_merge(struct bio_list *bl, struct bio_list *bl2)
 {
 	if (!bl2->head)

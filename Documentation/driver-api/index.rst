@@ -111,6 +111,7 @@ available subsections can be seen below.
    wmi
    dpll
    tee
+   wbrf
 
 .. only::  subproject and html
 

@@ -79,52 +79,6 @@ const char *blk_zone_cond_str(enum blk_zone_cond zone_cond)
 }
 EXPORT_SYMBOL_GPL(blk_zone_cond_str);
 
-/*
- * Return true if a request is a write requests that needs zone write locking.
- */
-bool blk_req_needs_zone_write_lock(struct request *rq)
-{
-	if (!rq->q->disk->seq_zones_wlock)
-		return false;
-
-	return blk_rq_is_seq_zoned_write(rq);
-}
-EXPORT_SYMBOL_GPL(blk_req_needs_zone_write_lock);
-
-bool blk_req_zone_write_trylock(struct request *rq)
-{
-	unsigned int zno = blk_rq_zone_no(rq);
-
-	if (test_and_set_bit(zno, rq->q->disk->seq_zones_wlock))
-		return false;
-
-	WARN_ON_ONCE(rq->rq_flags & RQF_ZONE_WRITE_LOCKED);
-	rq->rq_flags |= RQF_ZONE_WRITE_LOCKED;
-
-	return true;
-}
-EXPORT_SYMBOL_GPL(blk_req_zone_write_trylock);
-
-void __blk_req_zone_write_lock(struct request *rq)
-{
-	if (WARN_ON_ONCE(test_and_set_bit(blk_rq_zone_no(rq),
-					  rq->q->disk->seq_zones_wlock)))
-		return;
-
-	WARN_ON_ONCE(rq->rq_flags & RQF_ZONE_WRITE_LOCKED);
-	rq->rq_flags |= RQF_ZONE_WRITE_LOCKED;
-}
-EXPORT_SYMBOL_GPL(__blk_req_zone_write_lock);
-
-void __blk_req_zone_write_unlock(struct request *rq)
-{
-	rq->rq_flags &= ~RQF_ZONE_WRITE_LOCKED;
-	if (rq->q->disk->seq_zones_wlock)
-		WARN_ON_ONCE(!test_and_clear_bit(blk_rq_zone_no(rq),
-						 rq->q->disk->seq_zones_wlock));
-}
-EXPORT_SYMBOL_GPL(__blk_req_zone_write_unlock);
-
 /**
  * bdev_nr_zones - Get number of zones
  * @bdev:	Target device
@@ -529,6 +483,18 @@ static inline struct blk_zone_wplug *blk_zone_lookup_wplug(struct bio *bio)
 {
 	return __blk_zone_lookup_wplug(bio->bi_bdev->bd_disk,
 				       bio->bi_iter.bi_sector);
+}
+
+bool bio_zone_is_seq(struct bio *bio)
+{
+	return blk_zone_lookup_wplug(bio) != NULL;
+}
+
+bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno)
+{
+	struct blk_zone_wplug *zwplug = &disk->zone_wplugs[zno];
+
+	return zwplug->flags & BLK_ZONE_WPLUG_PLUGGED;
 }
 
 static void blk_zone_wplug_set_wp_offset(struct gendisk *disk,
@@ -1203,20 +1169,12 @@ void disk_free_zone_resources(struct gendisk *disk)
 		atomic_set(&disk->zone_nr_wplugs_with_error, 0);
 	}
 
-	kfree(disk->conv_zones_bitmap);
-	disk->conv_zones_bitmap = NULL;
-	kfree(disk->seq_zones_wlock);
-	disk->seq_zones_wlock = NULL;
-
 	blk_zone_free_write_plugs(disk, disk->zone_wplugs, disk->nr_zones);
 	disk->zone_wplugs = NULL;
 }
 
 struct blk_revalidate_zone_args {
 	struct gendisk	*disk;
-	unsigned long	*conv_zones_bitmap;
-	unsigned long	*seq_zones_wlock;
-	unsigned int	nr_zones;
 	struct blk_zone_wplug *zone_wplugs;
 	sector_t	sector;
 };
@@ -1265,22 +1223,9 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 	/* Check zone type */
 	switch (zone->type) {
 	case BLK_ZONE_TYPE_CONVENTIONAL:
-		if (!args->conv_zones_bitmap) {
-			args->conv_zones_bitmap =
-				blk_alloc_zone_bitmap(q->node, args->nr_zones);
-			if (!args->conv_zones_bitmap)
-				return -ENOMEM;
-		}
-		set_bit(idx, args->conv_zones_bitmap);
 		args->zone_wplugs[idx].flags |= BLK_ZONE_WPLUG_CONV;
 		break;
 	case BLK_ZONE_TYPE_SEQWRITE_REQ:
-		if (!args->seq_zones_wlock) {
-			args->seq_zones_wlock =
-				blk_alloc_zone_bitmap(q->node, args->nr_zones);
-			if (!args->seq_zones_wlock)
-				return -ENOMEM;
-		}
 		args->zone_wplugs[idx].capacity = zone->capacity;
 		args->zone_wplugs[idx].wp_offset = blk_zone_wp_offset(zone);
 		break;
@@ -1296,7 +1241,7 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 }
 
 /**
- * blk_revalidate_disk_zones - (re)allocate and initialize zone bitmaps
+ * blk_revalidate_disk_zones - (re)allocate and initialize zone write plugs
  * @disk:	Target disk
  *
  * Helper function for low-level device drivers to check, (re) allocate and
@@ -1314,7 +1259,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	sector_t zone_sectors = q->limits.chunk_sectors;
 	sector_t capacity = get_capacity(disk);
 	struct blk_revalidate_zone_args args = { };
-	unsigned int noio_flag;
+	unsigned int nr_zones, noio_flag;
 	int ret = -ENOMEM;
 
 	if (WARN_ON_ONCE(!blk_queue_is_zoned(q)))
@@ -1339,6 +1284,8 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 		return -ENODEV;
 	}
 
+	nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
+
 	/*
 	 * Ensure that all memory allocations in this context are done as if
 	 * GFP_NOIO was specified.
@@ -1346,8 +1293,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	noio_flag = memalloc_noio_save();
 
 	args.disk = disk;
-	args.nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
-	args.zone_wplugs = blk_zone_alloc_write_plugs(args.nr_zones);
+	args.zone_wplugs = blk_zone_alloc_write_plugs(nr_zones);
 	if (!args.zone_wplugs)
 		goto out_restore_noio;
 
@@ -1376,15 +1322,12 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	}
 
 	/*
-	 * Install the new bitmaps and update nr_zones only once the queue is
-	 * stopped and all I/Os are completed (i.e. a scheduler is not
-	 * referencing the bitmaps).
+	 * Install the new write plugs and update nr_zones only once the queue
+	 * is frozen and all I/Os are completed.
 	 */
 	blk_mq_freeze_queue(q);
 	if (ret > 0) {
-		disk->nr_zones = args.nr_zones;
-		swap(disk->seq_zones_wlock, args.seq_zones_wlock);
-		swap(disk->conv_zones_bitmap, args.conv_zones_bitmap);
+		disk->nr_zones = nr_zones;
 		swap(disk->zone_wplugs, args.zone_wplugs);
 		ret = 0;
 	} else {
@@ -1393,9 +1336,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	}
 	blk_mq_unfreeze_queue(q);
 
-	kfree(args.seq_zones_wlock);
-	kfree(args.conv_zones_bitmap);
-	blk_zone_free_write_plugs(disk, args.zone_wplugs, args.nr_zones);
+	blk_zone_free_write_plugs(disk, args.zone_wplugs, nr_zones);
 
 	return ret;
 

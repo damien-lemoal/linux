@@ -405,6 +405,7 @@ static inline struct bio *blk_queue_bounce(struct bio *bio,
 
 #ifdef CONFIG_BLK_DEV_ZONED
 void disk_free_zone_resources(struct gendisk *disk);
+bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno);
 static inline bool bio_zone_write_plugging(struct bio *bio)
 {
 	return bio_flagged(bio, BIO_ZONE_WRITE_PLUGGING);

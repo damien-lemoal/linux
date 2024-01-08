@@ -138,7 +138,8 @@ struct mapped_device {
 
 #ifdef CONFIG_BLK_DEV_ZONED
 	unsigned int nr_zones;
-	unsigned int *zwp_offset;
+	bool emulate_zone_append;
+	void *zone_revalidate_map;
 #endif
 
 #ifdef CONFIG_IMA
@@ -158,7 +159,6 @@ struct mapped_device {
 #define DMF_DEFERRED_REMOVE 6
 #define DMF_SUSPENDED_INTERNALLY 7
 #define DMF_POST_SUSPENDING 8
-#define DMF_EMULATE_ZONE_APPEND 9
 
 void disable_discard(struct mapped_device *md);
 void disable_write_zeroes(struct mapped_device *md);
@@ -176,13 +176,6 @@ static inline struct dm_stats *dm_get_stats(struct mapped_device *md)
 DECLARE_STATIC_KEY_FALSE(stats_enabled);
 DECLARE_STATIC_KEY_FALSE(swap_bios_enabled);
 DECLARE_STATIC_KEY_FALSE(zoned_enabled);
-
-static inline bool dm_emulate_zone_append(struct mapped_device *md)
-{
-	if (blk_queue_is_zoned(md->queue))
-		return test_bit(DMF_EMULATE_ZONE_APPEND, &md->flags);
-	return false;
-}
 
 #define DM_TABLE_MAX_DEPTH 16
 

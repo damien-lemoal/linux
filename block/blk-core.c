@@ -578,7 +578,7 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 
 	/* The bio sector must point to the start of a sequential zone */
 	if (!bdev_is_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector) ||
-	    !bio_zone_is_seq(bio))
+	    !blk_zone_is_seq(bio))
 		return BLK_STS_IOERR;
 
 	/*

@@ -84,9 +84,9 @@ static inline void blk_mq_debugfs_unregister_rqos(struct rq_qos *rqos)
 #endif
 
 #ifdef CONFIG_BLK_DEBUG_FS_ZONED
-int queue_zone_wlock_show(void *data, struct seq_file *m);
+int queue_zone_plugged_wplugs_show(void *data, struct seq_file *m);
 #else
-static inline int queue_zone_wlock_show(void *data, struct seq_file *m)
+static inline int queue_zone_plugged_wplugs_show(void *data, struct seq_file *m)
 {
 	return 0;
 }

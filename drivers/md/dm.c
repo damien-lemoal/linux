@@ -1419,25 +1419,12 @@ static void __map_bio(struct bio *clone)
 		down(&md->swap_bios_semaphore);
 	}
 
-	if (static_branch_unlikely(&zoned_enabled)) {
-		/*
-		 * Check if the IO needs a special mapping due to zone append
-		 * emulation on zoned target. In this case, dm_zone_map_bio()
-		 * calls the target map operation.
-		 */
-		if (unlikely(dm_emulate_zone_append(md)))
-			r = dm_zone_map_bio(tio);
-		else
-			goto do_map;
-	} else {
-do_map:
-		if (likely(ti->type->map == linear_map))
-			r = linear_map(ti, clone);
-		else if (ti->type->map == stripe_map)
-			r = stripe_map(ti, clone);
-		else
-			r = ti->type->map(ti, clone);
-	}
+	if (likely(ti->type->map == linear_map))
+		r = linear_map(ti, clone);
+	else if (ti->type->map == stripe_map)
+		r = stripe_map(ti, clone);
+	else
+		r = ti->type->map(ti, clone);
 
 	switch (r) {
 	case DM_MAPIO_SUBMITTED:
@@ -1774,18 +1761,32 @@ static void dm_split_and_process_bio(struct mapped_device *md,
 	struct clone_info ci;
 	struct dm_io *io;
 	blk_status_t error = BLK_STS_OK;
-	bool is_abnormal;
+	bool is_abnormal, need_split;
 
 	is_abnormal = is_abnormal_io(bio);
-	if (unlikely(is_abnormal)) {
+	if (likely(!md->emulate_zone_append))
+		need_split = is_abnormal;
+	else
+		need_split = is_abnormal || bio_straddle_zones(bio);
+	if (unlikely(need_split)) {
 		/*
 		 * Use bio_split_to_limits() for abnormal IO (e.g. discard, etc)
 		 * otherwise associated queue_limits won't be imposed.
+		 * Also split the BIO for mapped devices needing zone append
+		 * emulation to ensure that the BIO does not cross zone
+		 * boundaries.
 		 */
 		bio = bio_split_to_limits(bio);
 		if (!bio)
 			return;
 	}
+
+	/*
+	 * Use the block layer zone write plugging for mapped devices that
+	 * need zone append emulation (e.g. dm-crypt).
+	 */
+	if (md->emulate_zone_append && blk_zone_write_plug_bio(bio))
+		return;
 
 	/* Only support nowait for normal IO */
 	if (unlikely(bio->bi_opf & REQ_NOWAIT) && !is_abnormal) {
@@ -2007,7 +2008,6 @@ static void cleanup_mapped_device(struct mapped_device *md)
 		md->dax_dev = NULL;
 	}
 
-	dm_cleanup_zoned_dev(md);
 	if (md->disk) {
 		spin_lock(&_minor_lock);
 		md->disk->private_data = NULL;

@@ -395,6 +395,8 @@ static inline struct bio *blk_queue_bounce(struct bio *bio,
 
 #ifdef CONFIG_BLK_DEV_ZONED
 void disk_free_zone_resources(struct gendisk *disk);
+bool blk_zone_is_seq(struct bio *bio);
+bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno);
 static inline bool bio_zone_write_plugging(struct bio *bio)
 {
 	return bio_flagged(bio, BIO_ZONE_WRITE_PLUGGING);
@@ -427,6 +429,10 @@ int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
 #else /* CONFIG_BLK_DEV_ZONED */
 static inline void disk_free_zone_resources(struct gendisk *disk)
 {
+}
+static inline bool blk_zone_is_seq(struct bio *bio)
+{
+	return false;
 }
 static inline bool bio_zone_write_plugging(struct bio *bio)
 {

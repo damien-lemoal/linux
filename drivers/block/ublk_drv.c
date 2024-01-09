@@ -252,8 +252,6 @@ static int ublk_dev_param_zoned_apply(struct ublk_device *ub)
 
 	disk_set_zoned(ub->ub_disk);
 	blk_queue_flag_set(QUEUE_FLAG_ZONE_RESETALL, ub->ub_disk->queue);
-	blk_queue_required_elevator_features(ub->ub_disk->queue,
-					     ELEVATOR_F_ZBD_SEQ_WRITE);
 	disk_set_max_active_zones(ub->ub_disk, p->max_active_zones);
 	disk_set_max_open_zones(ub->ub_disk, p->max_open_zones);
 	blk_queue_max_zone_append_sectors(ub->ub_disk->queue, p->max_zone_append_sectors);

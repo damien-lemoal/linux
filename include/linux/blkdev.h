@@ -24,6 +24,7 @@
 #include <linux/sbitmap.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
+#include <linux/mempool.h>
 
 struct module;
 struct request_queue;
@@ -185,6 +186,11 @@ struct gendisk {
 	unsigned int		max_open_zones;
 	unsigned int		max_active_zones;
 	struct blk_zone_wplug	*zone_wplugs;
+	mempool_t		*zone_awplugs_pool;
+	unsigned int		zone_awplugs_pool_size;
+	atomic_t		zone_awplugs_reclaim_nr;
+	atomic_t		zone_awplugs_nr;
+	struct delayed_work	zone_awplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 #if IS_ENABLED(CONFIG_CDROM)

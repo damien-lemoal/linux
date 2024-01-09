@@ -19,6 +19,9 @@ soc/arm
 		ARM: mach-nspire: Rework support and directory structure
 		ARM: Delete ARM11MPCore perf leftovers
 		ARM: MAINTAINERS: drop empty entries for removed boards
+		ARM: debug: fix DEBUG_UNCOMPRESS help for !MULTIPLATFORM
+		soc: pxa: ssp: fix casts
+		ARM: davinci: always select CONFIG_CPU_ARM926T
 
 soc/dt
 	renesas/dt
@@ -161,6 +164,8 @@ soc/defconfig
 		ARM: multi_v7_defconfig: Enable RPMSG CHAR and CTRL
 	<no branch> (191fcf77e304392cc330fc19595cb90fd52d595f)
 		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-6.8-2
+	patch
+		ARM: multi_v7_defconfig: Enable STM32 IPCC mailbox driver
 
 soc/late
 

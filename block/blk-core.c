@@ -1218,5 +1218,7 @@ int __init blk_dev_init(void)
 
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
 
+	blk_zone_dev_init();
+
 	return 0;
 }

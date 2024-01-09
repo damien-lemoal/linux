@@ -33,6 +33,7 @@ place where this information is gathered.
    tee
    isapnp
    dcdbas
+   lsm
 
 .. only::  subproject and html
 

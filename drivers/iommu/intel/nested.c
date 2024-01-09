@@ -73,9 +73,116 @@ static void intel_nested_domain_free(struct iommu_domain *domain)
 	kfree(to_dmar_domain(domain));
 }
 
+static void nested_flush_dev_iotlb(struct dmar_domain *domain, u64 addr,
+				   unsigned int mask, u32 *fault)
+{
+	struct device_domain_info *info;
+	unsigned long flags;
+	u16 sid, qdep;
+
+	spin_lock_irqsave(&domain->lock, flags);
+	list_for_each_entry(info, &domain->devices, link) {
+		if (!info->ats_enabled)
+			continue;
+		sid = info->bus << 8 | info->devfn;
+		qdep = info->ats_qdep;
+		qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
+				   qdep, addr, mask, fault);
+		quirk_extra_dev_tlb_flush(info, addr, mask,
+					  IOMMU_NO_PASID, qdep);
+	}
+	spin_unlock_irqrestore(&domain->lock, flags);
+}
+
+static void intel_nested_flush_cache(struct dmar_domain *domain, u64 addr,
+				     unsigned long npages, bool ih, u32 *error)
+{
+	struct iommu_domain_info *info;
+	unsigned long i;
+	unsigned mask;
+	u32 fault;
+
+	xa_for_each(&domain->iommu_array, i, info)
+		qi_flush_piotlb(info->iommu,
+				domain_id_iommu(domain, info->iommu),
+				IOMMU_NO_PASID, addr, npages, ih, NULL);
+
+	if (!domain->has_iotlb_device)
+		return;
+
+	if (npages == U64_MAX)
+		mask = 64 - VTD_PAGE_SHIFT;
+	else
+		mask = ilog2(__roundup_pow_of_two(npages));
+
+	nested_flush_dev_iotlb(domain, addr, mask, &fault);
+
+	*error = 0;
+	/*
+	 * Invalidation queue error (i.e. IQE) will not be reported to user
+	 * as it's caused only by driver internal bug.
+	 */
+	if (fault & DMA_FSTS_ICE)
+		*error |= IOMMU_HWPT_INVALIDATE_VTD_S1_ICE;
+	if (fault & DMA_FSTS_ITE)
+		*error |= IOMMU_HWPT_INVALIDATE_VTD_S1_ITE;
+}
+
+static int intel_nested_cache_invalidate_user(struct iommu_domain *domain,
+					      struct iommu_user_data_array *array)
+{
+	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
+	struct iommu_hwpt_vtd_s1_invalidate inv_entry;
+	u32 processed = 0;
+	int ret = 0;
+	u32 index;
+
+	if (array->type != IOMMU_HWPT_INVALIDATE_DATA_VTD_S1) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	for (index = 0; index < array->entry_num; index++) {
+		ret = iommu_copy_struct_from_user_array(&inv_entry, array,
+							IOMMU_HWPT_INVALIDATE_DATA_VTD_S1,
+							index, hw_error);
+		if (ret)
+			break;
+
+		if (inv_entry.flags & ~IOMMU_VTD_INV_FLAGS_LEAF) {
+			ret = -EOPNOTSUPP;
+			break;
+		}
+
+		if (!IS_ALIGNED(inv_entry.addr, VTD_PAGE_SIZE) ||
+		    ((inv_entry.npages == U64_MAX) && inv_entry.addr)) {
+			ret = -EINVAL;
+			break;
+		}
+
+		intel_nested_flush_cache(dmar_domain, inv_entry.addr,
+					 inv_entry.npages,
+					 inv_entry.flags & IOMMU_VTD_INV_FLAGS_LEAF,
+					 &inv_entry.hw_error);
+
+		ret = iommu_respond_struct_to_user_array(array, index,
+							 (void *)&inv_entry,
+							 sizeof(inv_entry));
+		if (ret)
+			break;
+
+		processed++;
+	}
+
+out:
+	array->entry_num = processed;
+	return ret;
+}
+
 static const struct iommu_domain_ops intel_nested_domain_ops = {
 	.attach_dev		= intel_nested_attach_dev,
 	.free			= intel_nested_domain_free,
+	.cache_invalidate_user	= intel_nested_cache_invalidate_user,
 };
 
 struct iommu_domain *intel_nested_domain_alloc(struct iommu_domain *parent,

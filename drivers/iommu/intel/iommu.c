@@ -1318,7 +1318,7 @@ static void __iommu_flush_dev_iotlb(struct device_domain_info *info,
 	sid = info->bus << 8 | info->devfn;
 	qdep = info->ats_qdep;
 	qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
-			   qdep, addr, mask);
+			   qdep, addr, mask, NULL);
 	quirk_extra_dev_tlb_flush(info, addr, mask, IOMMU_NO_PASID, qdep);
 }
 
@@ -1346,7 +1346,7 @@ static void iommu_flush_dev_iotlb(struct dmar_domain *domain,
 					 PCI_DEVID(info->bus, info->devfn),
 					 info->pfsid, dev_pasid->pasid,
 					 info->ats_qdep, addr,
-					 mask);
+					 mask, NULL);
 	}
 	spin_unlock_irqrestore(&domain->lock, flags);
 }
@@ -1361,10 +1361,10 @@ static void domain_flush_pasid_iotlb(struct intel_iommu *iommu,
 
 	spin_lock_irqsave(&domain->lock, flags);
 	list_for_each_entry(dev_pasid, &domain->dev_pasids, link_domain)
-		qi_flush_piotlb(iommu, did, dev_pasid->pasid, addr, npages, ih);
+		qi_flush_piotlb(iommu, did, dev_pasid->pasid, addr, npages, ih, NULL);
 
 	if (!list_empty(&domain->devices))
-		qi_flush_piotlb(iommu, did, IOMMU_NO_PASID, addr, npages, ih);
+		qi_flush_piotlb(iommu, did, IOMMU_NO_PASID, addr, npages, ih, NULL);
 	spin_unlock_irqrestore(&domain->lock, flags);
 }
 
@@ -5002,10 +5002,10 @@ void quirk_extra_dev_tlb_flush(struct device_domain_info *info,
 	sid = PCI_DEVID(info->bus, info->devfn);
 	if (pasid == IOMMU_NO_PASID) {
 		qi_flush_dev_iotlb(info->iommu, sid, info->pfsid,
-				   qdep, address, mask);
+				   qdep, address, mask, NULL);
 	} else {
 		qi_flush_dev_iotlb_pasid(info->iommu, sid, info->pfsid,
-					 pasid, qdep, address, mask);
+					 pasid, qdep, address, mask, NULL);
 	}
 }
 

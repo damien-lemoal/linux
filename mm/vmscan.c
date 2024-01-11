@@ -92,6 +92,11 @@ struct scan_control {
 	unsigned long	anon_cost;
 	unsigned long	file_cost;
 
+#ifdef CONFIG_MEMCG
+	/* Swappiness value for proactive reclaim. Always use sc_swappiness()! */
+	int *proactive_swappiness;
+#endif
+
 	/* Can active folios be deactivated as part of reclaim? */
 #define DEACTIVATE_ANON 1
 #define DEACTIVATE_FILE 2
@@ -183,7 +188,7 @@ struct scan_control {
 #endif
 
 /*
- * From 0 .. 200.  Higher means more swappy.
+ * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
  */
 int vm_swappiness = 60;
 
@@ -227,6 +232,13 @@ static bool writeback_throttling_sane(struct scan_control *sc)
 #endif
 	return false;
 }
+
+static int sc_swappiness(struct scan_control *sc, struct mem_cgroup *memcg)
+{
+	if (sc->proactive && sc->proactive_swappiness)
+		return *sc->proactive_swappiness;
+	return mem_cgroup_swappiness(memcg);
+}
 #else
 static bool cgroup_reclaim(struct scan_control *sc)
 {
@@ -241,6 +253,11 @@ static bool root_reclaim(struct scan_control *sc)
 static bool writeback_throttling_sane(struct scan_control *sc)
 {
 	return true;
+}
+
+static int sc_swappiness(struct scan_control *sc, struct mem_cgroup *memcg)
+{
+	return READ_ONCE(vm_swappiness);
 }
 #endif
 
@@ -1879,6 +1896,8 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	bool stalled = false;
 
+	trace_mm_vmscan_lru_shrink_inactive_start(pgdat->node_id);
+
 	while (unlikely(too_many_isolated(pgdat, file, sc))) {
 		if (stalled)
 			return 0;
@@ -1963,7 +1982,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	if (file)
 		sc->nr.file_taken += nr_taken;
 
-	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
+	trace_mm_vmscan_lru_shrink_inactive_end(pgdat->node_id,
 			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
 	return nr_reclaimed;
 }
@@ -2000,6 +2019,8 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	unsigned nr_rotated = 0;
 	int file = is_file_lru(lru);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+
+	trace_mm_vmscan_lru_shrink_active_start(pgdat->node_id);
 
 	lru_add_drain();
 
@@ -2080,7 +2101,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 		lru_note_cost(lruvec, file, 0, nr_rotated);
 	mem_cgroup_uncharge_list(&l_active);
 	free_unref_page_list(&l_active);
-	trace_mm_vmscan_lru_shrink_active(pgdat->node_id, nr_taken, nr_activate,
+	trace_mm_vmscan_lru_shrink_active_end(pgdat->node_id, nr_taken, nr_activate,
 			nr_deactivate, nr_rotated, sc->priority, file);
 }
 
@@ -2328,7 +2349,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	unsigned long anon_cost, file_cost, total_cost;
-	int swappiness = mem_cgroup_swappiness(memcg);
+	int swappiness = sc_swappiness(sc, memcg);
 	u64 fraction[ANON_AND_FILE];
 	u64 denominator = 0;	/* gcc */
 	enum scan_balance scan_balance;
@@ -2404,7 +2425,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	ap = swappiness * (total_cost + 1);
 	ap /= anon_cost + 1;
 
-	fp = (200 - swappiness) * (total_cost + 1);
+	fp = (MAX_SWAPPINESS - swappiness) * (total_cost + 1);
 	fp /= file_cost + 1;
 
 	fraction[0] = ap;
@@ -2609,7 +2630,7 @@ static int get_swappiness(struct lruvec *lruvec, struct scan_control *sc)
 	    mem_cgroup_get_nr_swap_pages(memcg) < MIN_LRU_BATCH)
 		return 0;
 
-	return mem_cgroup_swappiness(memcg);
+	return sc_swappiness(sc, memcg);
 }
 
 static int get_nr_gens(struct lruvec *lruvec, int type)
@@ -4422,7 +4443,7 @@ static int get_type_to_scan(struct lruvec *lruvec, int swappiness, int *tier_idx
 {
 	int type, tier;
 	struct ctrl_pos sp, pv;
-	int gain[ANON_AND_FILE] = { swappiness, 200 - swappiness };
+	int gain[ANON_AND_FILE] = { swappiness, MAX_SWAPPINESS - swappiness };
 
 	/*
 	 * Compare the first tier of anon with that of file to determine which
@@ -4458,7 +4479,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	/*
 	 * Try to make the obvious choice first. When anon and file are both
 	 * available from the same generation, interpret swappiness 1 as file
-	 * first and 200 as anon first.
+	 * first and MAX_SWAPPINESS as anon first.
 	 */
 	if (!swappiness)
 		type = LRU_GEN_FILE;
@@ -4466,7 +4487,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 		type = LRU_GEN_ANON;
 	else if (swappiness == 1)
 		type = LRU_GEN_FILE;
-	else if (swappiness == 200)
+	else if (swappiness == MAX_SWAPPINESS)
 		type = LRU_GEN_ANON;
 	else
 		type = get_type_to_scan(lruvec, swappiness, &tier);
@@ -4518,9 +4539,10 @@ static int evict_folios(struct lruvec *lruvec, struct scan_control *sc, int swap
 	if (list_empty(&list))
 		return scanned;
 retry:
+	trace_mm_vmscan_lru_shrink_inactive_start(pgdat->node_id);
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false);
 	sc->nr_reclaimed += reclaimed;
-	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
+	trace_mm_vmscan_lru_shrink_inactive_end(pgdat->node_id,
 			scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
@@ -5408,9 +5430,9 @@ static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 
 	lruvec = get_lruvec(memcg, nid);
 
-	if (swappiness < 0)
+	if (swappiness < MIN_SWAPPINESS)
 		swappiness = get_swappiness(lruvec, sc);
-	else if (swappiness > 200)
+	else if (swappiness > MAX_SWAPPINESS)
 		goto done;
 
 	switch (cmd) {
@@ -6488,12 +6510,14 @@ unsigned long mem_cgroup_shrink_node(struct mem_cgroup *memcg,
 unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 					   unsigned long nr_pages,
 					   gfp_t gfp_mask,
-					   unsigned int reclaim_options)
+					   unsigned int reclaim_options,
+					   int *swappiness)
 {
 	unsigned long nr_reclaimed;
 	unsigned int noreclaim_flag;
 	struct scan_control sc = {
 		.nr_to_reclaim = max(nr_pages, SWAP_CLUSTER_MAX),
+		.proactive_swappiness = swappiness,
 		.gfp_mask = (current_gfp_context(gfp_mask) & GFP_RECLAIM_MASK) |
 				(GFP_HIGHUSER_MOVABLE & ~GFP_RECLAIM_MASK),
 		.reclaim_idx = MAX_NR_ZONES - 1,

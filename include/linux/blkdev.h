@@ -195,6 +195,8 @@ struct gendisk {
 	unsigned long		*conv_zones_bitmap;
 	unsigned long		*seq_zones_wlock;
 	struct blk_zone_wplug	*zone_wplugs;
+	atomic_t		zone_wplugs_nr_errors;
+	struct delayed_work	zone_wplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 #if IS_ENABLED(CONFIG_CDROM)

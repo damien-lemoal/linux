@@ -5518,8 +5518,8 @@ static void kvm_vcpu_ioctl_x86_get_xsave2(struct kvm_vcpu *vcpu,
 static void kvm_vcpu_ioctl_x86_get_xsave(struct kvm_vcpu *vcpu,
 					 struct kvm_xsave *guest_xsave)
 {
-	return kvm_vcpu_ioctl_x86_get_xsave2(vcpu, (void *)guest_xsave->region,
-					     sizeof(guest_xsave->region));
+	kvm_vcpu_ioctl_x86_get_xsave2(vcpu, (void *)guest_xsave->region,
+				      sizeof(guest_xsave->region));
 }
 
 static int kvm_vcpu_ioctl_x86_set_xsave(struct kvm_vcpu *vcpu,
@@ -10165,7 +10165,7 @@ static void kvm_inject_exception(struct kvm_vcpu *vcpu)
  *
  * But, if a VM-Exit occurs during instruction execution, and KVM does NOT skip
  * the instruction or inject an exception, then KVM can incorrecty inject a new
- * asynchrounous event if the event became pending after the CPU fetched the
+ * asynchronous event if the event became pending after the CPU fetched the
  * instruction (in the guest).  E.g. if a page fault (#PF, #NPF, EPT violation)
  * occurs and is resolved by KVM, a coincident NMI, SMI, IRQ, etc... can be
  * injected on the restarted instruction instead of being deferred until the
@@ -10186,7 +10186,7 @@ static int kvm_check_and_inject_events(struct kvm_vcpu *vcpu,
 	int r;
 
 	/*
-	 * Process nested events first, as nested VM-Exit supercedes event
+	 * Process nested events first, as nested VM-Exit supersedes event
 	 * re-injection.  If there's an event queued for re-injection, it will
 	 * be saved into the appropriate vmc{b,s}12 fields on nested VM-Exit.
 	 */
@@ -10884,7 +10884,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		/*
 		 * Assert that vCPU vs. VM APICv state is consistent.  An APICv
 		 * update must kick and wait for all vCPUs before toggling the
-		 * per-VM state, and responsing vCPUs must wait for the update
+		 * per-VM state, and responding vCPUs must wait for the update
 		 * to complete before servicing KVM_REQ_APICV_UPDATE.
 		 */
 		WARN_ON_ONCE((kvm_vcpu_apicv_activated(vcpu) != kvm_vcpu_apicv_active(vcpu)) &&
@@ -13031,7 +13031,10 @@ bool kvm_arch_vcpu_in_kernel(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.guest_state_protected)
 		return true;
 
-	return vcpu->arch.preempted_in_kernel;
+	if (vcpu != kvm_get_running_vcpu())
+		return vcpu->arch.preempted_in_kernel;
+
+	return static_call(kvm_x86_get_cpl)(vcpu) == 0;
 }
 
 unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu)

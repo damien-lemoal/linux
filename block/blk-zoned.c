@@ -1058,8 +1058,8 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
  * be called within the disk ->revalidate method for blk-mq based drivers.
  * Before calling this function, the device driver must already have set the
  * device zone size (chunk_sector limit) and the max zone append limit.
- * For BIO based drivers, this function cannot be used. BIO based device drivers
- * only need to set disk->nr_zones so that the sysfs exposed value is correct.
+ * BIO based drivers can also use this function as long as the device queue
+ * can be safely frozen.
  * If the @update_driver_data callback function is not NULL, the callback is
  * executed with the device request queue frozen after all zones have been
  * checked.
@@ -1075,8 +1075,6 @@ int blk_revalidate_disk_zones(struct gendisk *disk,
 	int ret;
 
 	if (WARN_ON_ONCE(!blk_queue_is_zoned(q)))
-		return -EIO;
-	if (WARN_ON_ONCE(!queue_is_mq(q)))
 		return -EIO;
 
 	if (!capacity)

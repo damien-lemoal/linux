@@ -7,15 +7,6 @@
 #include <linux/stringify.h>
 
 /*
- * Export symbols from the kernel to modules.  Forked from module.h
- * to reduce the amount of pointless cruft we feed to gcc when only
- * exporting a simple symbol or two.
- *
- * Try not to add #includes here.  It slows compilation and makes kernel
- * hackers place grumpy comments in header files.
- */
-
-/*
  * This comment block is used by fixdep. Please do not remove.
  *
  * When CONFIG_MODVERSIONS is changed from n to y, all source files having
@@ -23,23 +14,10 @@
  * side effect of the *.o build rule.
  */
 
-#ifndef __ASSEMBLY__
-#ifdef MODULE
-extern struct module __this_module;
-#define THIS_MODULE (&__this_module)
-#else
-#define THIS_MODULE ((struct module *)0)
-#endif
-#endif /* __ASSEMBLY__ */
-
 #ifdef CONFIG_64BIT
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 8				ASM_NL	\
-	.quad sym
+#define __EXPORT_SYMBOL_PTR	.quad
 #else
-#define __EXPORT_SYMBOL_REF(sym)			\
-	.balign 4				ASM_NL	\
-	.long sym
+#define __EXPORT_SYMBOL_PTR	.long
 #endif
 
 #define ___EXPORT_SYMBOL(sym, license, ns)		\
@@ -47,7 +25,7 @@ extern struct module __this_module;
 	__export_symbol_##sym:			ASM_NL	\
 		.asciz license			ASM_NL	\
 		.asciz ns			ASM_NL	\
-		__EXPORT_SYMBOL_REF(sym)	ASM_NL	\
+		__EXPORT_SYMBOL_PTR sym		ASM_NL	\
 	.previous
 
 #if defined(__DISABLE_EXPORTS)

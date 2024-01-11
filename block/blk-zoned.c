@@ -40,6 +40,8 @@ struct blk_zone_wplug {
 	unsigned long		flags;
 	struct bio_list		bio_list;
 	struct work_struct	bio_work;
+	unsigned int		wp_offset;
+	unsigned int		capacity;
 };
 
 /*
@@ -50,11 +52,14 @@ struct blk_zone_wplug {
  *  - BLK_ZONE_WPLUG_PLUGGED: Indicate that the zone write plug is plugged,
  *    that is, that write BIOs are being throttled due to a write BIO already
  *    being executed or the zone write plug bio list is not empty.
+ *  - BLK_ZONE_WPLUG_ERROR: Indicate that a write error happened which will be
+ *    recovered with a report zone to update the zone write pointer offset.
  */
 enum {
 	BLK_ZONE_WPLUG_CONV = 0,
 	BLK_ZONE_WPLUG_LOCKED,
 	BLK_ZONE_WPLUG_PLUGGED,
+	BLK_ZONE_WPLUG_ERROR,
 };
 
 /**
@@ -534,8 +539,11 @@ static void blk_zone_wplug_add_bio(struct blk_zone_wplug *zwplug,
 	 * there are other user submitters of BIOs. To avoid this problem,
 	 * the BIO is inserted in increasing sector position in the BIO list of
 	 * the zone write plug.
+	 * Given that zone append operations have no ordering constraints
+	 * and are never split, we do a simple add-at-tail for these.
 	 */
-	if (!pos || sector > pos->bi_iter.bi_sector) {
+	if (bio_op(bio) == REQ_OP_ZONE_APPEND ||
+	    !pos || sector > pos->bi_iter.bi_sector) {
 		bio_list_add(bl, bio);
 		return;
 	}
@@ -555,14 +563,180 @@ static void blk_zone_wplug_add_bio(struct blk_zone_wplug *zwplug,
 	bio_list_add(bl, bio);
 }
 
+static unsigned int blk_zone_wp_offset(struct blk_zone *zone)
+{
+	switch (zone->cond) {
+	case BLK_ZONE_COND_IMP_OPEN:
+	case BLK_ZONE_COND_EXP_OPEN:
+	case BLK_ZONE_COND_CLOSED:
+		return zone->wp - zone->start;
+	case BLK_ZONE_COND_FULL:
+		return zone->len;
+	case BLK_ZONE_COND_NOT_WP:
+	case BLK_ZONE_COND_EMPTY:
+	case BLK_ZONE_COND_OFFLINE:
+	case BLK_ZONE_COND_READONLY:
+	default:
+		/*
+		 * Conventional, offline and read-only zones do not have a valid
+		 * write pointer.
+		 */
+		return 0;
+	}
+}
+
+static void blk_zone_handle_reset(struct bio *bio)
+{
+	struct blk_zone_wplug *zwplug = blk_zone_lookup_wplug(bio);
+
+	/* Resetting conventional zones is not allowed */
+	if (!zwplug) {
+		bio_io_error(bio);
+		return;
+	}
+
+	blk_zone_wplug_lock(zwplug);
+	zwplug->wp_offset = 0;
+	blk_zone_wplug_unlock(zwplug);
+}
+
+static void blk_zone_handle_reset_all(struct bio *bio)
+{
+	struct gendisk *disk = bio->bi_bdev->bd_disk;
+	struct blk_zone_wplug *zwplug = &disk->zone_wplugs[0];
+	unsigned int i;
+
+	for (i = 0; i < disk->nr_zones; i++, zwplug++) {
+		/* Ignore conventional zones */
+		if (test_bit(BLK_ZONE_WPLUG_CONV, &zwplug->flags))
+			continue;
+		blk_zone_wplug_lock(zwplug);
+		zwplug->wp_offset = 0;
+		blk_zone_wplug_unlock(zwplug);
+	}
+}
+
+static void blk_zone_handle_finish(struct bio *bio)
+{
+	struct blk_zone_wplug *zwplug = blk_zone_lookup_wplug(bio);
+
+	/* Finishing conventional zones is not allowed */
+	if (!zwplug) {
+		bio_io_error(bio);
+		return;
+	}
+
+	blk_zone_wplug_lock(zwplug);
+	zwplug->wp_offset = bdev_zone_sectors(bio->bi_bdev);
+	blk_zone_wplug_unlock(zwplug);
+}
+
+static int blk_zone_handle_write_error_cb(struct blk_zone *zone,
+					  unsigned int idx, void *data)
+{
+	struct gendisk *disk = data;
+	unsigned int zno = disk_zone_no(disk, zone->start);
+	struct blk_zone_wplug *zwplug = &disk->zone_wplugs[zno];
+
+	zwplug->capacity = zone->capacity;
+	zwplug->wp_offset = blk_zone_wp_offset(zone);
+
+	return 0;
+}
+
+static bool blk_zone_handle_write_error(struct blk_zone_wplug *zwplug,
+					struct bio *bio)
+{
+	struct block_device *bdev = bio->bi_bdev;
+	struct gendisk *disk = bdev->bd_disk;
+	unsigned int zno = bio_zone_no(bio);
+	unsigned int noio_flag;
+	int ret;
+
+	/*
+	 * We had a write error, meaning that the sequential write pattern
+	 * is broken and that the plugged BIOs will fail. So abort them now.
+	 */
+	blk_zone_abort_wplug(zwplug);
+
+	/*
+	 * Issue a zone report to update the zone write pointer offset. If
+	 * this fail, we keep BLK_ZONE_WPLUG_ERROR set so that this is retried
+	 * again when a newly submitted BIO targets the same zone.
+	 */
+	noio_flag = memalloc_noio_save();
+	ret = disk->fops->report_zones(disk, bdev_zone_sectors(bdev) << zno, 1,
+				       blk_zone_handle_write_error_cb, disk);
+	memalloc_noio_restore(noio_flag);
+	if (ret != 1)
+		return false;
+
+	clear_bit(BLK_ZONE_WPLUG_ERROR, &zwplug->flags);
+
+	return true;
+}
+
+static struct bio *blk_zone_wplug_unplug_bio(struct blk_zone_wplug *zwplug,
+					     struct bio *bio)
+{
+	/*
+	 * If we do not need to emulate zone append, zone write pointer offset
+	 * tracking is not necessary and we have nothing to do.
+	 */
+	if (!bdev_emulates_zone_append(bio->bi_bdev))
+		return bio;
+
+	/* Handle write errors first. */
+	if (test_bit(BLK_ZONE_WPLUG_ERROR, &zwplug->flags)) {
+		if (!blk_zone_handle_write_error(zwplug, bio)) {
+			blk_zone_bio_io_error(bio);
+			return NULL;
+		}
+	}
+
+	/*
+	 * Check that the user is not attempting to write to a full zone.
+	 * We know such BIO will fail, and that would potentially overflow our
+	 * write pointer offset, causing zone append BIOs for one zone to be
+	 * directed at the following zone.
+         */
+	if (zwplug->wp_offset >= zwplug->capacity) {
+		blk_zone_bio_io_error(bio);
+		return NULL;
+	}
+
+	if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
+		/*
+		 * Use a regular write starting at the current write pointer.
+		 * The zone write pointer offset is updated on completion. Note
+		 * that we do not allow this write to be merged, similarly to
+		 * native zone append operations.
+		 */
+		bio->bi_opf &= ~REQ_OP_MASK;
+		bio->bi_opf |= REQ_OP_WRITE | REQ_NOMERGE;
+		bio->bi_iter.bi_sector += zwplug->wp_offset;
+
+		/*
+		 * Remember that this BIO is in fact a zone append operation
+		 * so that we can restore its operation code on completion.
+		 */
+		bio_set_flag(bio, BIO_EMULATES_ZONE_APPEND);
+	}
+
+	/* Advance the zone write pointer offset. */
+	zwplug->wp_offset += bio_sectors(bio);
+
+	return bio;
+}
+
 /**
  * blk_zone_write_plug_bio - Handle a zone write BIO with zone write plugging
  * @bio: The BIO being submitted
  *
- * Handle write and write zeroes operations using zone write plugging.
- * Return true whenever @bio execution needs to be delayed through the zone
- * write plug. Otherwise, return false to let the submission path process
- * @bio normally.
+ * Handle write, write zeroes and zone append operations requiring emulation
+ * using zone write plugging. Return true whenever @bio execution needs to be
+ * delayed through the zone write plug. Otherwise, return false to let the
+ * submission path process @bio normally.
  */
 bool blk_zone_write_plug_bio(struct bio *bio)
 {
@@ -601,11 +775,35 @@ bool blk_zone_write_plug_bio(struct bio *bio)
 	 * machinery operates at the request level, below the plug, and
 	 * completion of the flush sequence will go through the regular BIO
 	 * completion, which will handle zone write plugging.
+	 * Zone append operations that need emulation must also be plugged so
+	 * that these operations can be changed into regular writes.
+	 * Zone reset, reset all and finish commands need special treatment
+	 * to correctly track the write pointer offset of zones when zone
+	 * append emulation is needed. These commands are not plugged as we do
+	 * not need serialization with write and append operations. It is the
+	 * responsibility of the user to not issue reset and finish commands
+	 * when write operations are in flight.
 	 */
 	switch (bio_op(bio)) {
 	case REQ_OP_WRITE:
 	case REQ_OP_WRITE_ZEROES:
 		break;
+	case REQ_OP_ZONE_APPEND:
+		if (bdev_emulates_zone_append(bdev))
+			break;
+		return false;
+	case REQ_OP_ZONE_RESET:
+		if (bdev_emulates_zone_append(bdev))
+			blk_zone_handle_reset(bio);
+		return false;
+	case REQ_OP_ZONE_RESET_ALL:
+		if (bdev_emulates_zone_append(bdev))
+			blk_zone_handle_reset_all(bio);
+		return false;
+	case REQ_OP_ZONE_FINISH:
+		if (bdev_emulates_zone_append(bdev))
+			blk_zone_handle_finish(bio);
+		return false;
 	default:
 		return false;
 	}
@@ -638,6 +836,10 @@ bool blk_zone_write_plug_bio(struct bio *bio)
 	if (test_and_set_bit(BLK_ZONE_WPLUG_PLUGGED, &zwplug->flags)) {
 		blk_zone_wplug_add_bio(zwplug, bio);
 		bio = NULL;
+	} else {
+		bio = blk_zone_wplug_unplug_bio(zwplug, bio);
+		if (!bio)
+			clear_bit(BLK_ZONE_WPLUG_PLUGGED, &zwplug->flags);
 	}
 
 	blk_zone_wplug_unlock(zwplug);
@@ -658,7 +860,12 @@ static void blk_zone_wplug_bio_work(struct work_struct *work)
 	 * Unplug and submit the next plugged BIO. If we do not have any, clear
 	 * the plugged flag.
 	 */
-	bio = bio_list_pop(&zwplug->bio_list);
+	while ((bio = bio_list_pop(&zwplug->bio_list))) {
+		bio = blk_zone_wplug_unplug_bio(zwplug, bio);
+		if (bio)
+			break;
+	}
+
 	if (!bio)
 		clear_bit(BLK_ZONE_WPLUG_PLUGGED, &zwplug->flags);
 
@@ -677,6 +884,25 @@ void blk_zone_write_bio_endio(struct bio *bio)
 
 	if (WARN_ON_ONCE(!zwplug))
 		return;
+
+	if (bdev_emulates_zone_append(bio->bi_bdev)) {
+		/*
+		 * If this is a regular write emulating a zone append operation,
+		 * restore the original operation code.
+		 */
+		if (bio_flagged(bio, BIO_EMULATES_ZONE_APPEND)) {
+			bio->bi_opf &= ~REQ_OP_MASK;
+			bio->bi_opf |= REQ_OP_ZONE_APPEND;
+		}
+
+		/*
+		 * If bio failed, mark the zone write plug as having an error
+		 * so that the endio work recovers the write pointer using
+		 * report zones.
+		 */
+		if (bio->bi_status != BLK_STS_OK)
+			set_bit(BLK_ZONE_WPLUG_ERROR, &zwplug->flags);
+	}
 
 	/*
 	 * Schedule submission of the next plugged BIO if the zone is still
@@ -806,6 +1032,8 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 			if (!args->seq_zones_wlock)
 				return -ENOMEM;
 		}
+		args->zone_wplugs[idx].capacity = zone->capacity;
+		args->zone_wplugs[idx].wp_offset = blk_zone_wp_offset(zone);
 		break;
 	case BLK_ZONE_TYPE_SEQWRITE_PREF:
 	default:

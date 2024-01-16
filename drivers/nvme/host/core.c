@@ -1984,7 +1984,7 @@ static void nvme_update_disk_info(struct nvme_ctrl *ctrl, struct gendisk *disk,
 
 static bool nvme_ns_is_readonly(struct nvme_ns *ns, struct nvme_ns_info *info)
 {
-	return info->is_readonly || test_bit(NVME_NS_FORCE_RO, &ns->flags);
+	return info->is_readonly;
 }
 
 static inline bool nvme_first_scan(struct gendisk *disk)

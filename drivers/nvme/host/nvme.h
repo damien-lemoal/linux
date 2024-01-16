@@ -515,7 +515,7 @@ struct nvme_ns {
 	unsigned long flags;
 #define NVME_NS_REMOVING	0
 #define NVME_NS_ANA_PENDING	2
-#define NVME_NS_FORCE_RO	3
+#define NVME_NS_EMULATE_ZA	3
 #define NVME_NS_READY		4
 
 	struct cdev		cdev;

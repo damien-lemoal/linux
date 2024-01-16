@@ -53,25 +53,30 @@ int nvme_update_zone_info(struct nvme_ns *ns, unsigned lbaf)
 	struct nvme_id_ns_zns *id;
 	int status;
 
-	/* Driver requires zone append support */
+	/* Check zone append support */
 	if ((le32_to_cpu(log->iocs[nvme_cmd_zone_append]) &
 			NVME_CMD_EFFECTS_CSUPP)) {
-		if (test_and_clear_bit(NVME_NS_FORCE_RO, &ns->flags))
+		if (test_and_clear_bit(NVME_NS_EMULATE_ZA, &ns->flags))
 			dev_warn(ns->ctrl->device,
-				 "Zone Append supported for zoned namespace:%d. Remove read-only mode\n",
+				 "Zone Append supported for zoned namespace %d: disabling emulation\n",
 				 ns->head->ns_id);
-	} else {
-		set_bit(NVME_NS_FORCE_RO, &ns->flags);
-		dev_warn(ns->ctrl->device,
-			 "Zone Append not supported for zoned namespace:%d. Forcing to read-only mode\n",
-			 ns->head->ns_id);
-	}
 
-	/* Lazily query controller append limit for the first zoned namespace */
-	if (!ns->ctrl->max_zone_append) {
-		status = nvme_set_max_append(ns->ctrl);
-		if (status)
-			return status;
+		/*
+		 * Lazily query controller append limit for the first
+		 * zoned namespace.
+		 */
+		if (!ns->ctrl->max_zone_append) {
+			status = nvme_set_max_append(ns->ctrl);
+			if (status)
+				return status;
+		}
+	} else {
+		set_bit(NVME_NS_EMULATE_ZA, &ns->flags);
+		dev_warn(ns->ctrl->device,
+			 "Zone Append not supported for zoned namespace %d: forcing emulation\n",
+			 ns->head->ns_id);
+
+		ns->ctrl->max_zone_append = 0;
 	}
 
 	id = kzalloc(sizeof(*id), GFP_KERNEL);

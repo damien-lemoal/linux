@@ -453,6 +453,21 @@ bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno)
 	return test_bit(BLK_ZONE_WPLUG_PLUGGED, &zwplug->flags);
 }
 
+bool blk_zone_wplug_active(struct gendisk *disk, unsigned int zno,
+			   unsigned int *wp_offset)
+{
+	struct blk_zone_wplug *zwplug = &disk->zone_wplugs[zno];
+
+	blk_zone_wplug_lock(zwplug);
+	if (test_bit(BLK_ZONE_WPLUG_ACTIVE, &zwplug->flags))
+		*wp_offset = zwplug->zawplug->wp_offset;
+	else
+		*wp_offset = zwplug->info.wp_offset;
+	blk_zone_wplug_unlock(zwplug);
+
+	return test_bit(BLK_ZONE_WPLUG_ACTIVE, &zwplug->flags);
+}
+
 static inline void blk_zone_bio_io_error(struct bio *bio)
 {
 	bio_clear_flag(bio, BIO_ZONE_WRITE_PLUGGING);
@@ -526,6 +541,9 @@ static void blk_zone_activate_wplug(struct gendisk *disk,
 		return;
 	}
 
+	pr_info("# Zone %u: activating wplug\n",
+		(unsigned int)(zwplug - disk->zone_wplugs));
+
 	/*
 	 * Allocate an active plug: if this fails, schedule active plug
 	 * reclaim to refill the pool.
@@ -581,6 +599,9 @@ static void blk_zone_reclaim_active_wplug(struct gendisk *disk,
 		return;
 
 	clear_bit(BLK_ZONE_WPLUG_ACTIVE, &zwplug->flags);
+
+	pr_info("# Zone %u: reclaiming wplug\n",
+		(unsigned int)(zwplug - disk->zone_wplugs));
 
 	if (WARN_ON_ONCE(!bio_list_empty(&zawplug->bio_list)))
 		blk_zone_abort_wplug(zwplug);
@@ -704,6 +725,12 @@ static void blk_zone_wplug_add_bio(struct blk_zone_wplug *zwplug,
 	sector_t sector = bio->bi_iter.bi_sector;
 	struct bio_list *bl = &zwplug->zawplug->bio_list;
 	struct bio *prev, *pos = bl->tail;
+
+	pr_info("# Zone %u: plugging BIO %p, %llu + %u, wp +%u\n",
+		bio_zone_no(bio), bio,
+		bdev_offset_from_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector),
+		bio_sectors(bio),
+		zwplug->zawplug->wp_offset);
 
 	/*
 	 * The BIO is being plugged and thus will have to wait for the on-going
@@ -895,6 +922,12 @@ static struct bio *blk_zone_wplug_unplug_bio(struct blk_zone_wplug *zwplug,
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	struct blk_zone_active_wplug *zawplug = zwplug->zawplug;
 
+	pr_info("# Zone %u: unplug BIO %p, %llu + %u, wp +%u\n",
+		bio_zone_no(bio), bio,
+		bdev_offset_from_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector),
+		bio_sectors(bio),
+		zawplug->wp_offset);
+
 	/* Handle write errors first. */
 	if (test_bit(BLK_ZONE_WPLUG_ERROR, &zwplug->flags)) {
 		if (!blk_zone_handle_write_error(zwplug, bio)) {
@@ -957,6 +990,12 @@ bool blk_zone_write_plug_bio(struct bio *bio)
 
 	if (!disk->zone_wplugs)
 		return false;
+
+	pr_info("# Zone %u: received BIO %p, %llu + %u%s\n",
+		bio_zone_no(bio), bio,
+		bdev_offset_from_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector),
+		bio_sectors(bio),
+		bio_flagged(bio, BIO_ZONE_WRITE_PLUGGING) ? ", plugging set" : "");
 
 	/*
 	 * If the BIO already has the plugging flag set, then it was already
@@ -1103,6 +1142,12 @@ void blk_zone_write_bio_endio(struct bio *bio)
 
 	if (WARN_ON_ONCE(!zwplug))
 		return;
+
+	pr_info("# Zone %u: end BIO %p, %llu, err %d, wp +%u\n",
+		bio_zone_no(bio), bio,
+		bdev_offset_from_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector),
+		bio->bi_status,
+		zwplug->zawplug->wp_offset);
 
 	/*
 	 * If this is a regular write emulating a zone append operation,

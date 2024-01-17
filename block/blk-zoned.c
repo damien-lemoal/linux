@@ -451,6 +451,23 @@ bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno)
 	return test_bit(BLK_ZONE_WPLUG_PLUGGED, &zwplug->flags);
 }
 
+bool blk_zone_wplug_active(struct gendisk *disk, unsigned int zno,
+			   unsigned int *wp_offset)
+{
+	struct blk_zone_wplug *zwplug = &disk->zone_wplugs[zno];
+	bool active;
+
+	blk_zone_wplug_lock(zwplug);
+	active = test_bit(BLK_ZONE_WPLUG_ACTIVE, &zwplug->flags);
+	if (active)
+		*wp_offset = zwplug->zawplug->wp_offset;
+	else
+		*wp_offset = zwplug->info.wp_offset;
+	blk_zone_wplug_unlock(zwplug);
+
+	return active;
+}
+
 static inline void blk_zone_bio_io_error(struct bio *bio)
 {
 	bio_clear_flag(bio, BIO_ZONE_WRITE_PLUGGING);

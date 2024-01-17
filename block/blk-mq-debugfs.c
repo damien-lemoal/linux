@@ -161,6 +161,7 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_queue_attrs[] = {
 	{ "pm_only", 0600, queue_pm_only_show, NULL },
 	{ "state", 0600, queue_state_show, queue_state_write },
 	{ "zone_plugged_wplugs", 0400, queue_zone_plugged_wplugs_show, NULL },
+	{ "zone_active_wplugs", 0400, queue_zone_active_wplugs_show, NULL },
 	{ },
 };
 

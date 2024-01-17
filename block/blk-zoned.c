@@ -963,7 +963,6 @@ void disk_free_zone_resources(struct gendisk *disk)
 
 struct blk_revalidate_zone_args {
 	struct gendisk	*disk;
-	unsigned int	nr_zones;
 	struct blk_zone_wplug *zone_wplugs;
 	sector_t	sector;
 };
@@ -1009,12 +1008,6 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
 		return -ENODEV;
 	}
 
-	if (!args->zone_wplugs) {
-		args->zone_wplugs = blk_zoned_alloc_write_plugs(args->nr_zones);
-		if (!args->zone_wplugs)
-			return -ENOMEM;
-	}
-
 	/* Check zone type */
 	switch (zone->type) {
 	case BLK_ZONE_TYPE_CONVENTIONAL:
@@ -1054,7 +1047,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	sector_t zone_sectors = q->limits.chunk_sectors;
 	sector_t capacity = get_capacity(disk);
 	struct blk_revalidate_zone_args args = { };
-	unsigned int noio_flag;
+	unsigned int nr_zones, noio_flag;
 	int ret;
 
 	if (WARN_ON_ONCE(!blk_queue_is_zoned(q)))
@@ -1079,12 +1072,16 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 		return -ENODEV;
 	}
 
+	nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
+
 	/*
 	 * Ensure that all memory allocations in this context are done as if
 	 * GFP_NOIO was specified.
 	 */
 	args.disk = disk;
-	args.nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
+	args.zone_wplugs = blk_zoned_alloc_write_plugs(nr_zones);
+	if (!args.zone_wplugs)
+		return -ENOMEM;
 
 	noio_flag = memalloc_noio_save();
 	ret = disk->fops->report_zones(disk, 0, UINT_MAX,
@@ -1111,7 +1108,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	 */
 	blk_mq_freeze_queue(q);
 	if (ret > 0) {
-		disk->nr_zones = args.nr_zones;
+		disk->nr_zones = nr_zones;
 		swap(disk->zone_wplugs, args.zone_wplugs);
 		ret = 0;
 	} else {
@@ -1120,7 +1117,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	}
 	blk_mq_unfreeze_queue(q);
 
-	blk_zoned_free_write_plugs(disk, args.zone_wplugs, args.nr_zones);
+	blk_zoned_free_write_plugs(disk, args.zone_wplugs, nr_zones);
 
 	return ret;
 }

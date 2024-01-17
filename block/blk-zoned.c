@@ -562,6 +562,30 @@ bool blk_zone_wplug_plugged(struct gendisk *disk, unsigned int zno)
 	return disk->zone_wplugs[zno].flags & BLK_ZONE_WPLUG_PLUGGED;
 }
 
+bool blk_zone_wplug_active(struct gendisk *disk, unsigned int zno,
+			   unsigned int *wp_offset)
+{
+	struct blk_zone_wplug *zwplug;
+	unsigned long flags;
+	bool active;
+
+	if (!disk->zone_wplugs) {
+		*wp_offset = 0;
+		return false;
+	}
+
+	zwplug = &disk->zone_wplugs[zno];
+	blk_zone_wplug_lock(zwplug, flags);
+	active = zwplug->flags & BLK_ZONE_WPLUG_ACTIVE;
+	if (active)
+		*wp_offset = zwplug->zawplug->wp_offset;
+	else
+		*wp_offset = zwplug->info.wp_offset;
+	blk_zone_wplug_unlock(zwplug, flags);
+
+	return active;
+}
+
 static void blk_zone_wplug_set_wp_offset(struct gendisk *disk,
 					 struct blk_zone_wplug *zwplug,
 					 unsigned int wp_offset,

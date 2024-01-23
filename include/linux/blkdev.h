@@ -24,6 +24,7 @@
 #include <linux/sbitmap.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
+#include <linux/timekeeping.h>
 
 struct module;
 struct request_queue;
@@ -942,27 +943,28 @@ struct blk_plug {
 
 	/* if ios_left is > 1, we can batch tag/rq allocations */
 	struct request *cached_rq;
-	unsigned short nr_ios;
+	u64 cur_ktime;
+	unsigned char nr_ios;
 
-	unsigned short rq_count;
+	unsigned char rq_count;
 
 	bool multiple_queues;
 	bool has_elevator;
 
-	struct list_head cb_list; /* md requires an unplug callback */
+	struct hlist_head cb_list; /* md requires an unplug callback */
 };
 
 struct blk_plug_cb;
 typedef void (*blk_plug_cb_fn)(struct blk_plug_cb *, bool);
 struct blk_plug_cb {
-	struct list_head list;
+	struct hlist_node list;
 	blk_plug_cb_fn callback;
 	void *data;
 };
 extern struct blk_plug_cb *blk_check_plugged(blk_plug_cb_fn unplug,
 					     void *data, int size);
 extern void blk_start_plug(struct blk_plug *);
-extern void blk_start_plug_nr_ios(struct blk_plug *, unsigned short);
+extern void blk_start_plug_nr_ios(struct blk_plug *, unsigned char);
 extern void blk_finish_plug(struct blk_plug *);
 
 void __blk_flush_plug(struct blk_plug *plug, bool from_schedule);
@@ -974,12 +976,91 @@ static inline void blk_flush_plug(struct blk_plug *plug, bool async)
 
 int blkdev_issue_flush(struct block_device *bdev);
 long nr_blockdev_pages(void);
+
+/*
+ * tsk == current here
+ */
+static inline void blk_plug_invalidate_ts(struct task_struct *tsk)
+{
+	struct blk_plug *plug = tsk->plug;
+
+	if (plug)
+		plug->cur_ktime = 0;
+	current->flags &= ~PF_BLOCK_TS;
+}
+
+static inline u64 blk_time_get_ns(void)
+{
+	struct blk_plug *plug = current->plug;
+
+	if (!plug)
+		return ktime_get_ns();
+
+	/*
+	 * 0 could very well be a valid time, but rather than flag "this is
+	 * a valid timestamp" separately, just accept that we'll do an extra
+	 * ktime_get_ns() if we just happen to get 0 as the current time.
+	 */
+	if (!plug->cur_ktime) {
+		plug->cur_ktime = ktime_get_ns();
+		current->flags |= PF_BLOCK_TS;
+	}
+	return plug->cur_ktime;
+}
+
+static inline ktime_t blk_time_get(void)
+{
+	return ns_to_ktime(blk_time_get_ns());
+}
+
+/*
+ * From most significant bit:
+ * 1 bit: reserved for other usage, see below
+ * 12 bits: original size of bio
+ * 51 bits: issue time of bio
+ */
+#define BIO_ISSUE_RES_BITS      1
+#define BIO_ISSUE_SIZE_BITS     12
+#define BIO_ISSUE_RES_SHIFT     (64 - BIO_ISSUE_RES_BITS)
+#define BIO_ISSUE_SIZE_SHIFT    (BIO_ISSUE_RES_SHIFT - BIO_ISSUE_SIZE_BITS)
+#define BIO_ISSUE_TIME_MASK     ((1ULL << BIO_ISSUE_SIZE_SHIFT) - 1)
+#define BIO_ISSUE_SIZE_MASK     \
+	(((1ULL << BIO_ISSUE_SIZE_BITS) - 1) << BIO_ISSUE_SIZE_SHIFT)
+#define BIO_ISSUE_RES_MASK      (~((1ULL << BIO_ISSUE_RES_SHIFT) - 1))
+
+/* Reserved bit for blk-throtl */
+#define BIO_ISSUE_THROTL_SKIP_LATENCY (1ULL << 63)
+
+static inline u64 __bio_issue_time(u64 time)
+{
+	return time & BIO_ISSUE_TIME_MASK;
+}
+
+static inline u64 bio_issue_time(struct bio_issue *issue)
+{
+	return __bio_issue_time(issue->value);
+}
+
+static inline sector_t bio_issue_size(struct bio_issue *issue)
+{
+	return ((issue->value & BIO_ISSUE_SIZE_MASK) >> BIO_ISSUE_SIZE_SHIFT);
+}
+
+static inline void bio_issue_init(struct bio_issue *issue,
+				       sector_t size)
+{
+	size &= (1ULL << BIO_ISSUE_SIZE_BITS) - 1;
+	issue->value = ((issue->value & BIO_ISSUE_RES_MASK) |
+			(blk_time_get_ns() & BIO_ISSUE_TIME_MASK) |
+			((u64)size << BIO_ISSUE_SIZE_SHIFT));
+}
+
 #else /* CONFIG_BLOCK */
 struct blk_plug {
 };
 
 static inline void blk_start_plug_nr_ios(struct blk_plug *plug,
-					 unsigned short nr_ios)
+					 unsigned char nr_ios)
 {
 }
 
@@ -992,6 +1073,10 @@ static inline void blk_finish_plug(struct blk_plug *plug)
 }
 
 static inline void blk_flush_plug(struct blk_plug *plug, bool async)
+{
+}
+
+static inline void blk_plug_invalidate_ts(struct task_struct *tsk)
 {
 }
 

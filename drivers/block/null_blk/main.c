@@ -1528,12 +1528,16 @@ static struct nullb_queue *nullb_to_queue(struct nullb *nullb)
 
 static void null_submit_bio(struct bio *bio)
 {
-	sector_t sector = bio->bi_iter.bi_sector;
-	sector_t nr_sectors = bio_sectors(bio);
-	struct nullb *nullb = bio->bi_bdev->bd_disk->private_data;
-	struct nullb_queue *nq = nullb_to_queue(nullb);
+	struct nullb_queue *nq =
+		nullb_to_queue(bio->bi_bdev->bd_disk->private_data);
 
-	null_handle_cmd(alloc_cmd(nq, bio), sector, nr_sectors, bio_op(bio));
+	/* Respect the queue limits */
+	bio = bio_split_to_limits(bio);
+	if (!bio)
+		return;
+
+	null_handle_cmd(alloc_cmd(nq, bio), bio->bi_iter.bi_sector,
+			bio_sectors(bio), bio_op(bio));
 }
 
 #ifdef CONFIG_BLK_DEV_NULL_BLK_FAULT_INJECTION

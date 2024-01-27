@@ -255,6 +255,17 @@ static inline void bio_integrity_free(struct bio *bio)
 unsigned long blk_rq_timeout(unsigned long timeout);
 void blk_add_timer(struct request *req);
 
+enum bio_merge_status {
+	BIO_MERGE_OK,
+	BIO_MERGE_NONE,
+	BIO_MERGE_FAILED,
+};
+
+enum bio_merge_status blk_attempt_bio_merge(struct request_queue *q,
+					    struct request *rq,
+					    struct bio *bio,
+					    unsigned int nr_segs,
+					    bool sched_allow_merge);
 bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 		unsigned int nr_segs);
 bool blk_bio_list_merge(struct request_queue *q, struct list_head *list,
@@ -317,6 +328,7 @@ static inline bool bio_may_exceed_limits(struct bio *bio,
 		bio->bi_io_vec->bv_len + bio->bi_io_vec->bv_offset > PAGE_SIZE;
 }
 
+unsigned int bio_nr_segments(struct bio *bio);
 struct bio *__bio_split_to_limits(struct bio *bio,
 				  const struct queue_limits *lim,
 				  unsigned int *nr_segs);
@@ -410,6 +422,8 @@ static inline bool bio_is_zone_append(struct bio *bio)
 		bio_flagged(bio, BIO_EMULATES_ZONE_APPEND);
 }
 void blk_zone_write_bio_split(struct bio *bio, struct bio *split);
+void blk_zone_write_plug_bio_merged(struct bio *bio);
+void blk_zone_write_plug_attempt_merge(struct request *rq);
 static inline void blk_zone_complete_request_bio(struct request *rq,
 						 struct bio *bio)
 {
@@ -418,13 +432,14 @@ static inline void blk_zone_complete_request_bio(struct request *rq,
 	 * at which the BIO data was written. Return this value to the BIO
 	 * issuer through the BIO iter sector.
 	 * For plugged zone writes, which include emulated zone append, we need
-	 * the original BIO sector so that blk_zone_write_bio_endio() can
+	 * the original BIO sector so that blk_zone_write_plug_bio_endio() can
 	 * lookup the zone write plug.
 	 */
 	if (req_op(rq) == REQ_OP_ZONE_APPEND || bio_zone_write_plugging(bio))
 		bio->bi_iter.bi_sector = rq->__sector;
 }
-void blk_zone_write_bio_endio(struct bio *bio);
+void blk_zone_write_plug_bio_endio(struct bio *bio);
+void blk_zone_write_plug_complete_request(struct request *rq);
 int blkdev_report_zones_ioctl(struct block_device *bdev, unsigned int cmd,
 		unsigned long arg);
 int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
@@ -451,11 +466,20 @@ static inline bool bio_is_zone_append(struct bio *bio)
 static inline void blk_zone_write_bio_split(struct bio *bio, struct bio *split)
 {
 }
+static inline void blk_zone_write_plug_bio_merged(struct bio *bio)
+{
+}
+static inline void blk_zone_write_plug_attempt_merge(struct request *rq)
+{
+}
 static inline void blk_zone_complete_request_bio(struct request *rq,
 						 struct bio *bio)
 {
 }
-static inline void blk_zone_write_bio_endio(struct bio *bio)
+static inline void blk_zone_write_plug_bio_endio(struct bio *bio)
+{
+}
+static inline void blk_zone_write_plug_complete_request(struct request *rq)
 {
 }
 static inline int blkdev_report_zones_ioctl(struct block_device *bdev,

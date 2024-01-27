@@ -1586,7 +1586,7 @@ again:
 	 * BIO to the zone write plug to submit the next plugged BIO.
 	 */
 	if (bio_zone_write_plugging(bio))
-		blk_zone_write_bio_endio(bio);
+		blk_zone_write_plug_bio_endio(bio);
 
 	rq_qos_done_bio(bio);
 

@@ -334,6 +334,55 @@ split:
 }
 EXPORT_SYMBOL_GPL(bio_split_rw);
 
+/*
+ * Return the number of segments of a BIO, which can be 0 if the BIO
+ * needs splitting.
+ */
+unsigned int bio_nr_segments(struct bio *bio)
+{
+	struct request_queue *q = bio->bi_bdev->bd_disk->queue;
+	const struct queue_limits *lim = &q->limits;
+	unsigned int max_bytes = get_max_io_size(bio, lim) << SECTOR_SHIFT;
+	struct bio_vec bv, bvprv, *bvprvp = NULL;
+	struct bvec_iter iter;
+	unsigned nsegs = 0, bytes = 0;
+
+	switch (bio_op(bio)) {
+	case REQ_OP_DISCARD:
+	case REQ_OP_SECURE_ERASE:
+		return 1;
+	case REQ_OP_WRITE_ZEROES:
+		return 0;
+	default:
+		break;
+	}
+
+	bio_for_each_bvec(bv, bio, iter) {
+		/*
+		 * If the queue doesn't support SG gaps and adding this
+		 * offset would create a gap, disallow it.
+		 */
+		if (bvprvp && bvec_gap_to_prev(lim, bvprvp, bv.bv_offset))
+			return 0;
+
+		if (nsegs < lim->max_segments &&
+		    bytes + bv.bv_len <= max_bytes &&
+		    bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
+			nsegs++;
+			bytes += bv.bv_len;
+		} else {
+			if (bvec_split_segs(lim, &bv, &nsegs, &bytes,
+					    lim->max_segments, max_bytes))
+				return 0;
+		}
+
+		bvprv = bv;
+		bvprvp = &bvprv;
+	}
+
+	return nsegs;
+}
+
 /**
  * __bio_split_to_limits - split a bio to fit the queue limits
  * @bio:     bio to be split
@@ -967,12 +1016,6 @@ static void blk_account_io_merge_bio(struct request *req)
 	part_stat_unlock();
 }
 
-enum bio_merge_status {
-	BIO_MERGE_OK,
-	BIO_MERGE_NONE,
-	BIO_MERGE_FAILED,
-};
-
 static enum bio_merge_status bio_attempt_back_merge(struct request *req,
 		struct bio *bio, unsigned int nr_segs)
 {
@@ -989,6 +1032,9 @@ static enum bio_merge_status bio_attempt_back_merge(struct request *req,
 
 	blk_update_mixed_merge(req, bio, false);
 
+	if (req->rq_flags & RQF_ZONE_WRITE_PLUGGING)
+		blk_zone_write_plug_bio_merged(bio);
+
 	req->biotail->bi_next = bio;
 	req->biotail = bio;
 	req->__data_len += bio->bi_iter.bi_size;
@@ -1003,6 +1049,13 @@ static enum bio_merge_status bio_attempt_front_merge(struct request *req,
 		struct bio *bio, unsigned int nr_segs)
 {
 	const blk_opf_t ff = bio_failfast(bio);
+
+	/*
+	 * A front merge for zone writes can happen only if the user submitted
+	 * writes out of order. Do not attempt this to let the write fail.
+	 */
+	if (req->rq_flags & RQF_ZONE_WRITE_PLUGGING)
+		return BIO_MERGE_FAILED;
 
 	if (!ll_front_merge_fn(req, bio, nr_segs))
 		return BIO_MERGE_FAILED;
@@ -1052,11 +1105,11 @@ no_merge:
 	return BIO_MERGE_FAILED;
 }
 
-static enum bio_merge_status blk_attempt_bio_merge(struct request_queue *q,
-						   struct request *rq,
-						   struct bio *bio,
-						   unsigned int nr_segs,
-						   bool sched_allow_merge)
+enum bio_merge_status blk_attempt_bio_merge(struct request_queue *q,
+					    struct request *rq,
+					    struct bio *bio,
+					    unsigned int nr_segs,
+					    bool sched_allow_merge)
 {
 	if (!blk_rq_merge_ok(rq, bio))
 		return BIO_MERGE_NONE;

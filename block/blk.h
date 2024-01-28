@@ -326,6 +326,7 @@ static inline bool bio_may_exceed_limits(struct bio *bio,
 		bio->bi_io_vec->bv_len + bio->bi_io_vec->bv_offset > PAGE_SIZE;
 }
 
+bool bio_rw_needs_split(struct bio *bio, unsigned int *nr_segs);
 struct bio *__bio_split_to_limits(struct bio *bio,
 				  const struct queue_limits *lim,
 				  unsigned int *nr_segs);

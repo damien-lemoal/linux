@@ -252,6 +252,52 @@ static bool bvec_split_segs(const struct queue_limits *lim,
 	return len > 0 || bv->bv_len > max_len;
 }
 
+/*
+ * Check if @bio needs splitting. If it is, @segs and @split_bytes are used to
+ * respectively return the return the number of segments and the number of bytes
+ * up to the point where splitting is needed. Otherwise, these arguments return
+ * the total number of segments and bytes of the @bio.
+ */
+static inline bool __bio_rw_needs_split(struct bio *bio,
+					const struct queue_limits *lim,
+					unsigned *segs, unsigned max_bytes,
+					unsigned *split_bytes)
+{
+	struct bio_vec bv, bvprv, *bvprvp = NULL;
+	struct bvec_iter iter;
+	unsigned nsegs = 0, bytes = 0;
+	bool ret = false;
+
+	bio_for_each_bvec(bv, bio, iter) {
+		/*
+		 * If the queue doesn't support SG gaps and adding this
+		 * offset would create a gap, disallow it.
+		 */
+		if (bvprvp && bvec_gap_to_prev(lim, bvprvp, bv.bv_offset)) {
+			ret = true;
+			break;
+		}
+
+		if (nsegs < lim->max_segments &&
+		    bytes + bv.bv_len <= max_bytes &&
+		    bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
+			nsegs++;
+			bytes += bv.bv_len;
+		} else if (bvec_split_segs(lim, &bv, &nsegs, &bytes,
+					   lim->max_segments, max_bytes)) {
+			ret = true;
+			break;
+		}
+
+		bvprv = bv;
+		bvprvp = &bvprv;
+	}
+
+	*segs = nsegs;
+	*split_bytes = bytes;
+	return ret;
+}
+
 /**
  * bio_split_rw - split a bio in two bios
  * @bio:  [in] bio to be split
@@ -266,45 +312,19 @@ static bool bvec_split_segs(const struct queue_limits *lim,
  * - That it has at most @max_bytes worth of data
  * - That it has at most queue_max_segments(@q) segments.
  *
- * Except for discard requests the cloned bio will point at the bi_io_vec of
- * the original bio. It is the responsibility of the caller to ensure that the
- * original bio is not freed before the cloned bio. The caller is also
- * responsible for ensuring that @bs is only destroyed after processing of the
- * split bio has finished.
+ * The cloned bio will point at the bi_io_vec of the original bio. It is the
+ * responsibility of the caller to ensure that the original bio is not freed
+ * before the cloned bio. The caller is also responsible for ensuring that @bs
+ * is only destroyed after processing of the split bio has finished.
  */
 struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 		unsigned *segs, struct bio_set *bs, unsigned max_bytes)
 {
-	struct bio_vec bv, bvprv, *bvprvp = NULL;
-	struct bvec_iter iter;
-	unsigned nsegs = 0, bytes = 0;
+	unsigned bytes = 0;
 
-	bio_for_each_bvec(bv, bio, iter) {
-		/*
-		 * If the queue doesn't support SG gaps and adding this
-		 * offset would create a gap, disallow it.
-		 */
-		if (bvprvp && bvec_gap_to_prev(lim, bvprvp, bv.bv_offset))
-			goto split;
+	if (!__bio_rw_needs_split(bio, lim, segs, max_bytes, &bytes))
+		return NULL;
 
-		if (nsegs < lim->max_segments &&
-		    bytes + bv.bv_len <= max_bytes &&
-		    bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
-			nsegs++;
-			bytes += bv.bv_len;
-		} else {
-			if (bvec_split_segs(lim, &bv, &nsegs, &bytes,
-					lim->max_segments, max_bytes))
-				goto split;
-		}
-
-		bvprv = bv;
-		bvprvp = &bvprv;
-	}
-
-	*segs = nsegs;
-	return NULL;
-split:
 	/*
 	 * We can't sanely support splitting for a REQ_NOWAIT bio. End it
 	 * with EAGAIN if splitting is required and return an error pointer.
@@ -314,8 +334,6 @@ split:
 		bio_endio(bio);
 		return ERR_PTR(-EAGAIN);
 	}
-
-	*segs = nsegs;
 
 	/*
 	 * Individual bvecs might not be logical block aligned. Round down the
@@ -333,6 +351,17 @@ split:
 	return bio_split(bio, bytes >> SECTOR_SHIFT, GFP_NOIO, bs);
 }
 EXPORT_SYMBOL_GPL(bio_split_rw);
+
+bool bio_rw_needs_split(struct bio *bio, unsigned int *nr_segs)
+{
+	struct request_queue *q = bio->bi_bdev->bd_disk->queue;
+	const struct queue_limits *lim = &q->limits;
+	unsigned int bytes = 0;
+
+	return __bio_rw_needs_split(bio, lim, nr_segs,
+				    get_max_io_size(bio, lim) << SECTOR_SHIFT,
+				    &bytes);
+}
 
 /**
  * __bio_split_to_limits - split a bio to fit the queue limits

@@ -24,6 +24,7 @@
 #include <linux/sbitmap.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
+#include <linux/mempool.h>
 
 struct module;
 struct request_queue;
@@ -194,6 +195,8 @@ struct gendisk {
 	unsigned int		zone_capacity;
 	unsigned long		*conv_zones_bitmap;
 	unsigned long		*seq_zones_wlock;
+	unsigned int		zone_wplugs_pool_size;
+	mempool_t		*zone_wplugs_pool;
 	struct xarray		zone_wplugs;
 	atomic_t		zone_nr_wplugs_with_error;
 	struct delayed_work	zone_wplugs_work;

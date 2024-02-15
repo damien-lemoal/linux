@@ -53,7 +53,10 @@ struct blk_zone_wplug {
 	struct bio_list		bio_list;
 	union {
 		struct work_struct	bio_work;
-		struct rcu_head		rcu_head;
+		struct {
+			struct gendisk	*disk;
+			struct rcu_head	rcu_head;
+		};
 	};
 };
 
@@ -529,7 +532,7 @@ static inline struct blk_zone_wplug *bio_alloc_zone_wplug(struct bio *bio)
 	if (bio->bi_opf & REQ_NOWAIT)
 		gfp_mask = GFP_NOWAIT;
 
-	zwplug = kmem_cache_alloc(blk_zone_wplugs_cachep, gfp_mask);
+	zwplug = mempool_alloc(disk->zone_wplugs_pool, gfp_mask);
 	if (!zwplug)
 		return NULL;
 
@@ -565,7 +568,7 @@ static void disk_free_zone_wplug_rcu(struct rcu_head *head)
 	struct blk_zone_wplug *zwplug =
 		container_of(head, struct blk_zone_wplug, rcu_head);
 
-	kmem_cache_free(blk_zone_wplugs_cachep, zwplug);
+	mempool_free(zwplug, zwplug->disk->zone_wplugs_pool);
 }
 
 static inline void disk_free_zone_wplug(struct gendisk *disk,
@@ -576,6 +579,7 @@ static inline void disk_free_zone_wplug(struct gendisk *disk,
 	xa_erase(&disk->zone_wplugs, zwplug->zone_no);
 
 	zwplug->flags |= BLK_ZONE_WPLUG_FREEING;
+	zwplug->disk = disk;
 
 	call_rcu(&zwplug->rcu_head, disk_free_zone_wplug_rcu);
 }
@@ -1294,12 +1298,49 @@ void disk_free_zone_resources(struct gendisk *disk)
 
 	xa_destroy(&disk->zone_wplugs);
 
+	mempool_destroy(disk->zone_wplugs_pool);
+	disk->zone_wplugs_pool = NULL;
+	disk->zone_wplugs_pool_size = 0;
+
 	kfree(disk->conv_zones_bitmap);
 	disk->conv_zones_bitmap = NULL;
 	kfree(disk->seq_zones_wlock);
 	disk->seq_zones_wlock = NULL;
 	disk->zone_capacity = 0;
 	disk->nr_zones = 0;
+}
+
+#define BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE	128
+
+static int disk_init_zone_wplug_mempool(struct gendisk *disk,
+					unsigned int nr_zones)
+{
+	struct queue_limits *lim = &disk->queue->limits;
+	unsigned int pool_size;
+	int ret;
+
+	/*
+	 * Size the disk mempool of zone write plugs with enough elements
+	 * given the device open and active zones limits. When there are no
+	 * device limits, we use BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE.
+	 */
+	pool_size = max(lim->max_active_zones, lim->max_open_zones);
+	if (!pool_size)
+		pool_size = BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE;
+	pool_size = min(pool_size, nr_zones);
+
+ 	if (!disk->zone_wplugs_pool) {
+		disk->zone_wplugs_pool_size = pool_size;
+		disk->zone_wplugs_pool =
+			mempool_create_slab_pool(disk->zone_wplugs_pool_size,
+						 blk_zone_wplugs_cachep);
+		if (!disk->zone_wplugs_pool)
+			ret = -ENOMEM;
+	} else if (disk->zone_wplugs_pool_size != pool_size) {
+		ret = mempool_resize(disk->zone_wplugs_pool, pool_size);
+	}
+
+	return ret;
 }
 
 struct blk_revalidate_zone_args {
@@ -1466,6 +1507,13 @@ int blk_revalidate_disk_zones(struct gendisk *disk,
 	noio_flag = memalloc_noio_save();
 	args.disk = disk;
 	args.nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
+
+	ret = disk_init_zone_wplug_mempool(disk, args.nr_zones);
+	if (ret) {
+		memalloc_noio_restore(noio_flag);
+		return -ENODEV;
+	}
+
 	ret = disk->fops->report_zones(disk, 0, UINT_MAX,
 				       blk_revalidate_zone_cb, &args);
 	if (!ret) {

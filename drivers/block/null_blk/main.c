@@ -1903,18 +1903,16 @@ static int null_add_dev(struct nullb_device *dev)
 	if (dev->virt_boundary)
 		lim.virt_boundary_mask = PAGE_SIZE - 1;
 	if (dev->zoned) {
-		lim.zoned = true;
-		lim.chunk_sectors = dev->zone_size_sects;
-		lim.max_zone_append_sectors = dev->zone_size_sects;
-		lim.max_open_zones = dev->zone_max_open;
-		lim.max_active_zones = dev->zone_max_active;
+		rv = null_init_zoned_dev(dev, &lim);
+		if (rv)
+			goto out_cleanup_tags;
 	}
 	null_config_discard(nullb, &lim);
 
 	nullb->disk = blk_mq_alloc_disk(nullb->tag_set, &lim, nullb);
 	if (IS_ERR(nullb->disk)) {
 		rv = PTR_ERR(nullb->disk);
-		goto out_cleanup_tags;
+		goto out_cleanup_zone;
 	}
 	nullb->q = nullb->disk->queue;
 
@@ -1928,12 +1926,6 @@ static int null_add_dev(struct nullb_device *dev)
 		blk_queue_write_cache(nullb->q, true, true);
 	}
 
-	if (dev->zoned) {
-		rv = null_init_zoned_dev(dev, nullb->q);
-		if (rv)
-			goto out_cleanup_disk;
-	}
-
 	nullb->q->queuedata = nullb;
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, nullb->q);
 
@@ -1941,7 +1933,7 @@ static int null_add_dev(struct nullb_device *dev)
 	rv = ida_alloc(&nullb_indexes, GFP_KERNEL);
 	if (rv < 0) {
 		mutex_unlock(&lock);
-		goto out_cleanup_zone;
+		goto out_cleanup_disk;
 	}
 	nullb->index = rv;
 	dev->index = rv;
@@ -1984,10 +1976,10 @@ static int null_add_dev(struct nullb_device *dev)
 
 out_ida_free:
 	ida_free(&nullb_indexes, nullb->index);
-out_cleanup_zone:
-	null_free_zoned_dev(dev);
 out_cleanup_disk:
 	put_disk(nullb->disk);
+out_cleanup_zone:
+	null_free_zoned_dev(dev);
 out_cleanup_tags:
 	if (nullb->tag_set == &nullb->__tag_set)
 		blk_mq_free_tag_set(nullb->tag_set);

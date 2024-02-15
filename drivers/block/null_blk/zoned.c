@@ -58,7 +58,8 @@ static inline void null_unlock_zone(struct nullb_device *dev,
 		mutex_unlock(&zone->mutex);
 }
 
-int null_init_zoned_dev(struct nullb_device *dev, struct request_queue *q)
+int null_init_zoned_dev(struct nullb_device *dev,
+			struct queue_limits *lim)
 {
 	sector_t dev_capacity_sects, zone_capacity_sects;
 	struct nullb_zone *zone;
@@ -150,6 +151,13 @@ int null_init_zoned_dev(struct nullb_device *dev, struct request_queue *q)
 
 		sector += dev->zone_size_sects;
 	}
+
+	/* Set the limits */
+	lim->zoned = true;
+	lim->chunk_sectors = dev->zone_size_sects;
+	lim->max_zone_append_sectors = dev->zone_size_sects;
+	lim->max_open_zones = dev->zone_max_open;
+	lim->max_active_zones = dev->zone_max_active;
 
 	return 0;
 }

@@ -185,10 +185,14 @@ struct gendisk {
 	 */
 	unsigned int		nr_zones;
 	unsigned int		zone_capacity;
+	unsigned long		*conv_zones_bitmap;
+	unsigned int		zone_nr_wplugs;
 	unsigned int		zone_wplugs_pool_size;
-	mempool_t		*zone_wplugs_pool;
-	struct xarray		zone_wplugs;
-	atomic_t		zone_nr_wplugs_with_error;
+	unsigned int		zone_wplugs_hash_bits;
+	spinlock_t		zone_wplugs_lock;
+	struct hlist_head	zone_wplugs_pool;
+	struct hlist_head	zone_wplugs_error;
+	struct hlist_head	*zone_wplugs_hash;
 	struct delayed_work	zone_wplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */
 

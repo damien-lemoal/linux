@@ -1314,6 +1314,16 @@ static int btrfs_load_zone_info(struct btrfs_fs_info *fs_info, int zone_idx,
 		return 0;
 	}
 
+	if (btrfs_dev_is_empty_zone(device, info->physical)) {
+		if (!device->bdev->bd_disk->zone_capacity)
+			return -EIO;
+		btrfs_dev_clear_zone_empty(device, info->physical);
+		info->alloc_offset = 0;
+		info->capacity = (u64)device->bdev->bd_disk->zone_capacity <<
+			SECTOR_SHIFT;
+		return 0;
+	}
+
 	/* This zone will be used for allocation, so mark this zone non-empty. */
 	btrfs_dev_clear_zone_empty(device, info->physical);
 

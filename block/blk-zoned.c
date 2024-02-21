@@ -48,6 +48,7 @@ static struct kmem_cache *blk_zone_wplugs_cachep;
  * Per-zone write plug.
  */
 struct blk_zone_wplug {
+	struct hlist_node	node;
 	refcount_t		ref;
 	spinlock_t		lock;
 	unsigned int		flags;
@@ -56,7 +57,6 @@ struct blk_zone_wplug {
 	struct bio_list		bio_list;
 	struct work_struct	bio_work;
 	struct gendisk		*disk;
-	struct rcu_head		rcu_head;
 };
 
 /*
@@ -422,6 +422,26 @@ fail:
 	return ret;
 }
 
+static inline bool disk_zone_is_conv(struct gendisk *disk, sector_t sector)
+{
+	if (!disk->conv_zones_bitmap)
+		return false;
+	return test_bit(disk_zone_no(disk, sector), disk->conv_zones_bitmap);
+}
+
+static inline bool bio_zone_is_conv(struct bio *bio)
+{
+	return disk_zone_is_conv(bio->bi_bdev->bd_disk, bio->bi_iter.bi_sector);
+}
+
+static inline void blk_free_zone_wplug(struct blk_zone_wplug *zwplug)
+{
+	WARN_ON_ONCE(!bio_list_empty(&zwplug->bio_list));
+	WARN_ON_ONCE(refcount_read(&zwplug->ref));
+
+	mempool_free(zwplug, zwplug->disk->zone_wplugs_pool);
+}
+
 static inline bool blk_can_free_zone_wplug(struct blk_zone_wplug *zwplug)
 {
 	/* If the zone is still busy, the plug cannot be freed. */
@@ -433,40 +453,95 @@ static inline bool blk_can_free_zone_wplug(struct blk_zone_wplug *zwplug)
 		zwplug->wp_offset >= zwplug->disk->zone_capacity;
 }
 
-
-static void blk_free_zone_wplug_rcu(struct rcu_head *head)
+static bool blk_insert_zone_wplug(struct blk_zone_wplug *zwplug)
 {
-	struct blk_zone_wplug *zwplug =
-		container_of(head, struct blk_zone_wplug, rcu_head);
+	struct gendisk *disk = zwplug->disk;
+	struct blk_zone_wplug *zwplg;
+	unsigned long flags;
+	unsigned int idx =
+		hash_32(zwplug->zone_no, disk->zone_wplugs_hash_bits);
 
-	mempool_free(zwplug, zwplug->disk->zone_wplugs_pool);
+	/*
+	 * Add the new zone write plug to the hash table, but carefully as we
+	 * are racing with other submission context, so we may already have a
+	 * zone write plug for the same zone.
+	 */
+	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
+	hlist_for_each_entry_rcu(zwplg,
+				 &disk->zone_wplugs_hash[idx], node) {
+		if (zwplg->zone_no == zwplug->zone_no) {
+			spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
+			return false;
+		}
+	}
+
+	hlist_add_head_rcu(&zwplug->node, &disk->zone_wplugs_hash[idx]);
+
+	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
+
+	return true;
 }
 
-static inline void blk_erase_zone_wplug(struct blk_zone_wplug *zwplug)
+static inline void blk_remove_zone_wplug(struct blk_zone_wplug *zwplug)
 {
+	struct gendisk *disk = zwplug->disk;
+	unsigned long flags;
+
+	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
+	hlist_del_init_rcu(&zwplug->node);
 	zwplug->flags |= BLK_ZONE_WPLUG_FREEING;
 	refcount_dec(&zwplug->ref);
-	xa_erase(&zwplug->disk->zone_wplugs, zwplug->zone_no);
+	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 }
 
-static inline void blk_free_zone_wplug(struct blk_zone_wplug *zwplug)
+static struct blk_zone_wplug *disk_lookup_zone_wplug(struct gendisk *disk,
+						     sector_t sector)
 {
-	WARN_ON_ONCE(!bio_list_empty(&zwplug->bio_list));
-	WARN_ON_ONCE(refcount_read(&zwplug->ref));
+	unsigned int zno = disk_zone_no(disk, sector);
+	unsigned int idx = hash_32(zno, disk->zone_wplugs_hash_bits);
+	struct blk_zone_wplug *zwplug;
 
-	call_rcu(&zwplug->rcu_head, blk_free_zone_wplug_rcu);
-}
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(zwplug,
+				 &disk->zone_wplugs_hash[idx], node) {
+		if (zwplug->zone_no == zno) {
+			rcu_read_unlock();
+			return zwplug;
+		}
+	}
+	rcu_read_unlock();
 
-static inline struct blk_zone_wplug *
-disk_lookup_zone_wplug(struct gendisk *disk, sector_t sector)
-{
-	return xa_load(&disk->zone_wplugs, disk_zone_no(disk, sector));
+	return NULL;
 }
 
 static inline struct blk_zone_wplug *bio_lookup_zone_wplug(struct bio *bio)
 {
 	return disk_lookup_zone_wplug(bio->bi_bdev->bd_disk,
 				      bio->bi_iter.bi_sector);
+}
+
+static inline unsigned int disk_zone_wplugs_hash_size(struct gendisk *disk)
+{
+	return 1U << disk->zone_wplugs_hash_bits;
+}
+
+static void disk_empty_zone_wplugs_hash(struct gendisk *disk)
+{
+	struct blk_zone_wplug *zwplug;
+	unsigned int i;
+
+	if (!disk->zone_wplugs_hash)
+		return;
+
+	/* Free all the zone write plugs we have. */
+	for (i = 0; i < disk_zone_wplugs_hash_size(disk); i++) {
+		while (!hlist_empty(&disk->zone_wplugs_hash[i])) {
+			zwplug = hlist_entry(disk->zone_wplugs_hash[i].first,
+					     struct blk_zone_wplug, node);
+			blk_remove_zone_wplug(zwplug);
+			blk_free_zone_wplug(zwplug);
+		}
+	}
 }
 
 static inline void blk_get_zone_wplug(struct blk_zone_wplug *zwplug)
@@ -480,12 +555,6 @@ static inline void blk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 		blk_free_zone_wplug(zwplug);
 }
 
-static inline bool blk_zone_wplug_is_conv(struct blk_zone_wplug *zwplug)
-{
-	return xa_is_value(zwplug) &&
-		xa_to_value(zwplug) == BLK_ZONE_WPLUG_CONV;
-}
-
 static struct blk_zone_wplug *disk_get_zone_wplug_noalloc(struct gendisk *disk,
 							  sector_t sector)
 {
@@ -493,15 +562,8 @@ static struct blk_zone_wplug *disk_get_zone_wplug_noalloc(struct gendisk *disk,
 
 	rcu_read_lock();
 
-	/* Return NULL if the BIO is targetting a conventional zone. */
 	zwplug = disk_lookup_zone_wplug(disk, sector);
-	if (!zwplug || blk_zone_wplug_is_conv(zwplug)) {
-		rcu_read_unlock();
-		return zwplug;
-	}
-
-
-	if (!refcount_inc_not_zero(&zwplug->ref))
+	if (!zwplug || !refcount_inc_not_zero(&zwplug->ref))
 		zwplug = NULL;
 
 	rcu_read_unlock();
@@ -522,8 +584,7 @@ static struct blk_zone_wplug *bio_get_zone_wplug_locked(struct bio *bio,
 {
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	sector_t sector = bio->bi_iter.bi_sector;
-	unsigned int zno = disk_zone_no(disk, sector);
-	struct blk_zone_wplug *zwplug, *zwplg;
+	struct blk_zone_wplug *zwplug;
 	gfp_t gfp_mask = GFP_NOIO;
 
 again:
@@ -531,11 +592,6 @@ again:
 
 	/* Return NULL if the BIO is targetting a conventional zone. */
 	zwplug = disk_lookup_zone_wplug(disk, sector);
-	if (blk_zone_wplug_is_conv(zwplug)) {
-		rcu_read_unlock();
-		return NULL;
-	}
-
 	if (zwplug && refcount_inc_not_zero(&zwplug->ref)) {
 		/*
 		 * Check that a BIO completion or another zone reset or finish
@@ -566,7 +622,7 @@ again:
 	refcount_set(&zwplug->ref, 2);
 	spin_lock_init(&zwplug->lock);
 	zwplug->flags = 0;
-	zwplug->zone_no = zno;
+	zwplug->zone_no = disk_zone_no(disk, sector);
 	zwplug->wp_offset = sector & (disk->queue->limits.chunk_sectors - 1);
 	bio_list_init(&zwplug->bio_list);
 	INIT_WORK(&zwplug->bio_work, blk_zone_wplug_bio_work);
@@ -574,16 +630,9 @@ again:
 
 	spin_lock_irqsave(&zwplug->lock, *flags);
 
-	/*
-	 * Add the new zone write plug to the xarray, but carefully as we are
-	 * racing with other submission context, so we may already have a plug.
-	 */
-	zwplg = xa_cmpxchg(&disk->zone_wplugs, zno, NULL, zwplug, gfp_mask);
-	if (zwplg) {
+	if (!blk_insert_zone_wplug(zwplug)) {
 		spin_unlock_irqrestore(&zwplug->lock, *flags);
 		mempool_free(zwplug, disk->zone_wplugs_pool);
-		if (xa_is_err(zwplg))
-			return ERR_PTR(xa_err(zwplg));
 		goto again;
 	}
 
@@ -674,12 +723,12 @@ static void blk_zone_wplug_set_wp_offset(struct blk_zone_wplug *zwplug,
 	}
 
 	/*
-	 * The zone write plug now has no BIO plugged: erase it from the
-	 * zarray so that it cannot be seen. The plug will be freed when the
+	 * The zone write plug now has no BIO plugged: remove it from the
+	 * hash table so that it cannot be seen. The plug will be freed when the
 	 * last reference is dropped.
 	 */
 	if (blk_can_free_zone_wplug(zwplug))
-		blk_erase_zone_wplug(zwplug);
+		blk_remove_zone_wplug(zwplug);
 
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 }
@@ -689,6 +738,12 @@ static bool blk_zone_wplug_handle_reset_or_finish(struct bio *bio,
 {
 	struct blk_zone_wplug *zwplug;
 
+	/* Conventional zones cannot be reset nor finished. */
+	if (bio_zone_is_conv(bio)) {
+		bio_io_error(bio);
+		return true;
+	}
+
 	/*
 	 * If we have a zone write plug, set its write pointer offset to 0
 	 * (reset case) or to the zone size (finish case). This will abort all
@@ -697,18 +752,10 @@ static bool blk_zone_wplug_handle_reset_or_finish(struct bio *bio,
 	 * writes failing anyway.
 	 */
 	zwplug = bio_get_zone_wplug_noalloc(bio);
-	if (!zwplug)
-		return false;
-
-	if (blk_zone_wplug_is_conv(zwplug)) {
-		/* Conventional zones cannot be reset nor finished. */
-		bio_io_error(bio);
-		return true;
+	if (zwplug) {
+		blk_zone_wplug_set_wp_offset(zwplug, wp_offset);
+		blk_put_zone_wplug(zwplug);
 	}
-
-	blk_zone_wplug_set_wp_offset(zwplug, wp_offset);
-
-	blk_put_zone_wplug(zwplug);
 
 	return false;
 }
@@ -728,7 +775,7 @@ static bool blk_zone_wplug_handle_reset_all(struct bio *bio)
 	for (i = 0; i < disk->nr_zones; i++) {
 		zwplug = disk_get_zone_wplug_noalloc(disk, sector);
 		sector += disk->queue->limits.chunk_sectors;
-		if (!zwplug || blk_zone_wplug_is_conv(zwplug))
+		if (!zwplug)
 			continue;
 		blk_zone_wplug_set_wp_offset(zwplug, 0);
 		blk_put_zone_wplug(zwplug);
@@ -935,20 +982,23 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 		return true;
 	}
 
-	zwplug = bio_get_zone_wplug_locked(bio, &flags);
-	if (IS_ERR(zwplug)) {
-		bio_io_error(bio);
-		return true;
-	}
-
-	if (!zwplug) {
-		/* Conventional zones do not need write plugging. */
+	/*
+	 * Writes to conventional zones have no ordering constraints so they do
+	 * not need to be plugged.
+	 */
+	if (bio_zone_is_conv(bio)) {
+		/* Zone append to conventional zones is not allowed. */
 		if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
-			/* Zone append to conventional zones is not allowed. */
 			bio_io_error(bio);
 			return true;
 		}
 		return false;
+	}
+
+	zwplug = bio_get_zone_wplug_locked(bio, &flags);
+	if (IS_ERR(zwplug)) {
+		bio_io_error(bio);
+		return true;
 	}
 
 	/* Indicate that this BIO is being handled using zone write plugging. */
@@ -1086,7 +1136,7 @@ static void blk_zone_wplug_unplug_bio(struct blk_zone_wplug *zwplug)
 	 * (it was reset), free its zone write plug.
 	 */
 	if (blk_can_free_zone_wplug(zwplug))
-		blk_erase_zone_wplug(zwplug);
+		blk_remove_zone_wplug(zwplug);
 
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 }
@@ -1216,9 +1266,9 @@ static int blk_zone_wplug_report_zone_cb(struct blk_zone *zone,
 	return 0;
 }
 
-static void disk_zone_wplug_handle_error(struct gendisk *disk,
-					 struct blk_zone_wplug *zwplug)
+static void blk_zone_wplug_handle_error(struct blk_zone_wplug *zwplug)
 {
+	struct gendisk *disk = zwplug->disk;
 	sector_t zone_start_sector =
 		bdev_zone_sectors(disk->part0) * zwplug->zone_no;
 	unsigned int noio_flag;
@@ -1278,7 +1328,7 @@ static void disk_zone_wplug_handle_error(struct gendisk *disk,
 unplug:
 	zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
 	if (blk_can_free_zone_wplug(zwplug))
-		blk_erase_zone_wplug(zwplug);
+		blk_remove_zone_wplug(zwplug);
 
 unlock:
 	spin_unlock_irqrestore(&zwplug->lock, flags);
@@ -1289,49 +1339,74 @@ static void disk_zone_wplugs_work(struct work_struct *work)
 	struct gendisk *disk =
 		container_of(work, struct gendisk, zone_wplugs_work.work);
 	struct blk_zone_wplug *zwplug;
-	sector_t sector = 0;
+	sector_t sector;
 	unsigned int i;
 
 	while (atomic_read(&disk->zone_nr_wplugs_with_error)) {
+		sector = 0;
 		for (i = 0; i < disk->nr_zones; i++) {
 			zwplug = disk_get_zone_wplug_noalloc(disk, sector);
 			sector += disk->queue->limits.chunk_sectors;
-			if (!zwplug || blk_zone_wplug_is_conv(zwplug))
+			if (!zwplug)
 				continue;
-			disk_zone_wplug_handle_error(disk, zwplug);
+			blk_zone_wplug_handle_error(zwplug);
 			blk_put_zone_wplug(zwplug);
 		}
 	}
 }
 
-void disk_init_zone_resources(struct gendisk *disk)
+/*
+ * Default to a pool of 128 zone write plugs for devices that do
+ * not have open and active zone limits. For the hash table size,
+ * do not exceed 4KB (512 hlist head entries), that is, 9 bits.
+ */
+#define BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE	128
+#define BLK_ZONE_MAX_WPLUG_HASH_BITS		9
+
+static int disk_alloc_zone_resources(struct gendisk *disk,
+				     unsigned int pool_size)
 {
-	xa_init_flags(&disk->zone_wplugs, XA_FLAGS_LOCK_IRQ);
+	unsigned int i;
+
+	/* Prepare our hash table and mempool. */
 	atomic_set(&disk->zone_nr_wplugs_with_error, 0);
 	INIT_DELAYED_WORK(&disk->zone_wplugs_work, disk_zone_wplugs_work);
+	disk->zone_wplugs_hash_bits =
+		min(ilog2(pool_size) + 1, BLK_ZONE_MAX_WPLUG_HASH_BITS);
+
+	disk->zone_wplugs_hash =
+		kcalloc(disk_zone_wplugs_hash_size(disk),
+			sizeof(struct hlist_head), GFP_KERNEL);
+	if (!disk->zone_wplugs_hash)
+		return -ENOMEM;
+
+	for (i = 0; i < disk_zone_wplugs_hash_size(disk); i++)
+		INIT_HLIST_HEAD(&disk->zone_wplugs_hash[i]);
+
+	disk->zone_wplugs_pool_size = pool_size;
+	disk->zone_wplugs_pool =
+		mempool_create_slab_pool(pool_size,
+					 blk_zone_wplugs_cachep);
+	if (!disk->zone_wplugs_pool) {
+		kfree(disk->zone_wplugs_hash);
+		disk->zone_wplugs_hash = NULL;
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 void disk_free_zone_resources(struct gendisk *disk)
 {
-	struct blk_zone_wplug *zwplug;
-	XA_STATE(xas, &disk->zone_wplugs, 0);
-
 	cancel_delayed_work_sync(&disk->zone_wplugs_work);
 
-	rcu_barrier();
-
-	rcu_read_lock();
-	xas_for_each(&xas, zwplug, disk->nr_zones - 1) {
-		if (blk_zone_wplug_is_conv(zwplug))
-			continue;
-		blk_erase_zone_wplug(zwplug);
-		blk_free_zone_wplug(zwplug);
-	}
-	rcu_read_unlock();
+	disk_empty_zone_wplugs_hash(disk);
 
 	rcu_barrier();
 
-	xa_destroy(&disk->zone_wplugs);
+	kfree(disk->zone_wplugs_hash);
+	disk->zone_wplugs_hash = NULL;
+	disk->zone_wplugs_hash_bits = 0;
 
 	mempool_destroy(disk->zone_wplugs_pool);
 	disk->zone_wplugs_pool = NULL;
@@ -1341,10 +1416,8 @@ void disk_free_zone_resources(struct gendisk *disk)
 	disk->nr_zones = 0;
 }
 
-#define BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE	128
-
-static int disk_revalidate_zone_wplug_mempool(struct gendisk *disk,
-					      unsigned int nr_zones)
+static int disk_revalidate_zone_wplugs(struct gendisk *disk,
+				       unsigned int nr_zones)
 {
 	struct queue_limits *lim = &disk->queue->limits;
 	unsigned int pool_size;
@@ -1360,18 +1433,18 @@ static int disk_revalidate_zone_wplug_mempool(struct gendisk *disk,
 		pool_size = BLK_ZONE_DEFAULT_WPLUG_POOL_SIZE;
 	pool_size = min(pool_size, nr_zones);
 
- 	if (!disk->zone_wplugs_pool) {
-		disk->zone_wplugs_pool_size = pool_size;
-		disk->zone_wplugs_pool =
-			mempool_create_slab_pool(disk->zone_wplugs_pool_size,
-						 blk_zone_wplugs_cachep);
-		if (!disk->zone_wplugs_pool)
-			ret = -ENOMEM;
-	} else if (disk->zone_wplugs_pool_size != pool_size) {
+	if (!disk->zone_wplugs_hash)
+		return disk_alloc_zone_resources(disk, pool_size);
+
+	/* If we already have our mempool, resize it if its size changed. */
+	if (disk->zone_wplugs_pool_size != pool_size) {
 		ret = mempool_resize(disk->zone_wplugs_pool, pool_size);
+		if (ret)
+			return ret;
+		disk->zone_wplugs_pool_size = pool_size;
 	}
 
-	return ret;
+	return 0;
 }
 
 struct blk_revalidate_zone_args {
@@ -1381,57 +1454,6 @@ struct blk_revalidate_zone_args {
 	unsigned int	zone_capacity;
 	sector_t	sector;
 };
-
-/*
- * Update the zone write plugs xarray as needed, if zone types changed.
- * This is executed with the disk queue frozen, so we are guaranteed
- * that no BIOs are plugged.
- */
-static int disk_revalidate_zone_wplugs(struct gendisk *disk,
-				       struct blk_revalidate_zone_args *args)
-{
-	struct blk_zone_wplug *zwplug;
-	unsigned int i;
-
-	for (i = 0; i < args->nr_zones; i++) {
-		if (args->conv_zones_bitmap &&
-		    test_bit(i, args->conv_zones_bitmap)) {
-			/*
-			 * Store the conventional zone type as a value in the
-			 * xarray. If the previous entry was a plug for a
-			 * sequential zone, free it.
-			 */
-			zwplug = xa_store(&disk->zone_wplugs, i,
-					  xa_mk_value(BLK_ZONE_WPLUG_CONV),
-					  GFP_KERNEL);
-			if (xa_is_err(zwplug))
-				return xa_err(zwplug);
-			if (zwplug && !blk_zone_wplug_is_conv(zwplug))
-				mempool_free(zwplug, disk->zone_wplugs_pool);
-		} else {
-			/*
-			 * Make sure that sequential zones are not marked as
-			 * conventional ones.
-			 */
-			zwplug = xa_load(&disk->zone_wplugs, i);
-			if (blk_zone_wplug_is_conv(zwplug))
-				xa_erase(&disk->zone_wplugs, i);
-		}
-	}
-
-	/* Free excess zone write plugs we may have. */
-	for (i = args->nr_zones; i < disk->nr_zones; i++) {
-		zwplug = xa_load(&disk->zone_wplugs, i);
-		if (zwplug && !blk_zone_wplug_is_conv(zwplug))
-			mempool_free(zwplug, disk->zone_wplugs_pool);
-		xa_erase(&disk->zone_wplugs, i);
-	}
-
-	disk->nr_zones = args->nr_zones;
-	disk->zone_capacity = args->zone_capacity;
-
-	return 0;
-}
 
 /*
  * Helper function to check the validity of zones of a zoned block device.
@@ -1560,7 +1582,7 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	args.disk = disk;
 	args.nr_zones = (capacity + zone_sectors - 1) >> ilog2(zone_sectors);
 	noio_flag = memalloc_noio_save();
-	ret = disk_revalidate_zone_wplug_mempool(disk, args.nr_zones);
+	ret = disk_revalidate_zone_wplugs(disk, args.nr_zones);
 	if (ret) {
 		memalloc_noio_restore(noio_flag);
 		return ret;
@@ -1589,7 +1611,11 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	 */
 	blk_mq_freeze_queue(q);
 	if (ret > 0) {
-		ret = disk_revalidate_zone_wplugs(disk, &args);
+		disk->nr_zones = args.nr_zones;
+		disk->zone_capacity = args.zone_capacity;
+		swap(disk->conv_zones_bitmap, args.conv_zones_bitmap);
+		disk_empty_zone_wplugs_hash(disk);
+		ret = 0;
 	} else {
 		pr_warn("%s: failed to revalidate zones\n", disk->disk_name);
 		disk_free_zone_resources(disk);
@@ -1614,24 +1640,23 @@ int queue_zone_wplugs_show(void *data, struct seq_file *m)
 	struct request_queue *q = data;
 	struct blk_zone_wplug *zwplug;
 	struct gendisk *disk = q->disk;
-	XA_STATE(xas, &disk->zone_wplugs, 0);
 	unsigned long flags;
+	unsigned int i;
 
 	rcu_read_lock();
-
-	xas_for_each(&xas, zwplug, disk->nr_zones - 1) {
-		if (xas_retry(&xas, zwplug) || blk_zone_wplug_is_conv(zwplug))
-                        continue;
-		spin_lock_irqsave(&zwplug->lock, flags);
-		seq_printf(m, "zone %u: flags 0x%x, ref %u, wp %u, %u BIOs\n",
-			   zwplug->zone_no,
-			   zwplug->flags,
-			   refcount_read(&zwplug->ref),
-			   zwplug->wp_offset,
-			   bio_list_size(&zwplug->bio_list));
-		spin_unlock_irqrestore(&zwplug->lock, flags);
+	for (i = 0; i < disk_zone_wplugs_hash_size(disk); i++) {
+		hlist_for_each_entry_rcu(zwplug,
+					 &disk->zone_wplugs_hash[i], node) {
+			spin_lock_irqsave(&zwplug->lock, flags);
+			seq_printf(m, "%u 0x%x %u %u %u\n",
+				   zwplug->zone_no,
+				   zwplug->flags,
+				   refcount_read(&zwplug->ref),
+				   zwplug->wp_offset,
+				   bio_list_size(&zwplug->bio_list));
+			spin_unlock_irqrestore(&zwplug->lock, flags);
+		}
 	}
-
 	rcu_read_unlock();
 
 	return 0;

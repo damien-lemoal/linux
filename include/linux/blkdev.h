@@ -40,7 +40,6 @@ struct rq_qos;
 struct blk_queue_stats;
 struct blk_stat_callback;
 struct blk_crypto_profile;
-struct blk_zone_wplug;
 
 extern const struct device_type disk_type;
 extern const struct device_type part_type;
@@ -185,9 +184,12 @@ struct gendisk {
 	 */
 	unsigned int		nr_zones;
 	unsigned int		zone_capacity;
+	unsigned long		*conv_zones_bitmap;
+	mempool_t               *zone_wplugs_pool;
 	unsigned int		zone_wplugs_pool_size;
-	mempool_t		*zone_wplugs_pool;
-	struct xarray		zone_wplugs;
+	unsigned int		zone_wplugs_hash_bits;
+	spinlock_t		zone_wplugs_lock;
+	struct hlist_head	*zone_wplugs_hash;
 	atomic_t		zone_nr_wplugs_with_error;
 	struct delayed_work	zone_wplugs_work;
 #endif /* CONFIG_BLK_DEV_ZONED */

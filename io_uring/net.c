@@ -716,6 +716,11 @@ static inline bool io_recv_finish(struct io_kiocb *req, int *ret,
 		int mshot_retry_ret = IOU_ISSUE_SKIP_COMPLETE;
 
 		io_recv_prep_retry(req);
+
+		/* buffer list now empty, no point trying again */
+		if (req->flags & REQ_F_BL_EMPTY)
+			goto enobufs;
+
 		/* Known not-empty or unknown state, retry */
 		if (cflags & IORING_CQE_F_SOCK_NONEMPTY || msg->msg_inq == -1) {
 			if (sr->nr_multishot_loops++ < MULTISHOT_MAX_RETRY)
@@ -724,6 +729,7 @@ static inline bool io_recv_finish(struct io_kiocb *req, int *ret,
 			sr->nr_multishot_loops = 0;
 			mshot_retry_ret = IOU_REQUEUE;
 		}
+enobufs:
 		if (issue_flags & IO_URING_F_MULTISHOT)
 			*ret = mshot_retry_ret;
 		else

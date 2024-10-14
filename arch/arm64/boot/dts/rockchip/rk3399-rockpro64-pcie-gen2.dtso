@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * DT-overlay to run the PCIe Dual Mode controller at Gen2 speed.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&pcie0 {
+	max-link-speed = <2>;
+};
+
+&pcie0_ep {
+	max-link-speed = <2>;
+};

@@ -276,7 +276,7 @@ static phys_addr_t dw_pcie_ep_align_addr(struct pci_epc *epc,
 	phys_addr_t mask = pci->region_align - 1;
 	size_t ofst = pci_addr & mask;
 
-	*pci_size = ALIGN(ofst + *pci_size, ep->page_size);
+	*pci_size = ALIGN(ofst + *pci_size, epc->mem->window.page_size);
 	*offset = ofst;
 
 	return pci_addr & ~mask;

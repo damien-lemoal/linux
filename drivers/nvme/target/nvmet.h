@@ -535,6 +535,8 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 		enum nvme_subsys_type type);
 void nvmet_subsys_put(struct nvmet_subsys *subsys);
 void nvmet_subsys_del_ctrls(struct nvmet_subsys *subsys);
+struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
+		const char *subsysnqn);
 
 u16 nvmet_req_find_ns(struct nvmet_req *req);
 void nvmet_put_namespace(struct nvmet_ns *ns);

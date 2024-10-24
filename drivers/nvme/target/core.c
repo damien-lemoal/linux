@@ -90,9 +90,6 @@ u16 nvmet_report_invalid_opcode(struct nvmet_req *req)
 	return NVME_SC_INVALID_OPCODE | NVME_STATUS_DNR;
 }
 
-static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
-		const char *subsysnqn);
-
 u16 nvmet_copy_to_sgl(struct nvmet_req *req, off_t off, const void *buf,
 		size_t len)
 {
@@ -1238,6 +1235,7 @@ void nvmet_update_cc(struct nvmet_ctrl *ctrl, u32 new)
 		ctrl->csts &= ~NVME_CSTS_SHST_CMPLT;
 	mutex_unlock(&ctrl->lock);
 }
+EXPORT_SYMBOL_GPL(nvmet_update_cc);
 
 static void nvmet_init_cap(struct nvmet_ctrl *ctrl)
 {
@@ -1527,10 +1525,19 @@ static void nvmet_ctrl_free(struct kref *ref)
 	nvmet_subsys_put(subsys);
 }
 
+struct nvmet_ctrl *nvmet_ctrl_get(struct nvmet_ctrl *ctrl)
+{
+	if (!ctrl || !kref_get_unless_zero(&ctrl->ref))
+		return NULL;
+	return ctrl;
+}
+EXPORT_SYMBOL_GPL(nvmet_ctrl_get);
+
 void nvmet_ctrl_put(struct nvmet_ctrl *ctrl)
 {
 	kref_put(&ctrl->ref, nvmet_ctrl_free);
 }
+EXPORT_SYMBOL_GPL(nvmet_ctrl_put);
 
 void nvmet_ctrl_fatal_error(struct nvmet_ctrl *ctrl)
 {
@@ -1551,7 +1558,7 @@ ssize_t nvmet_ctrl_host_traddr(struct nvmet_ctrl *ctrl,
 	return ctrl->ops->host_traddr(ctrl, traddr, traddr_len);
 }
 
-static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
+struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
 		const char *subsysnqn)
 {
 	struct nvmet_subsys_link *p;
@@ -1585,6 +1592,7 @@ static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
 	up_read(&nvmet_config_sem);
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(nvmet_find_get_subsys);
 
 struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 		enum nvme_subsys_type type)
@@ -1694,6 +1702,7 @@ void nvmet_subsys_put(struct nvmet_subsys *subsys)
 {
 	kref_put(&subsys->ref, nvmet_subsys_free);
 }
+EXPORT_SYMBOL_GPL(nvmet_subsys_put);
 
 static int __init nvmet_init(void)
 {

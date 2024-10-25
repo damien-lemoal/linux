@@ -502,6 +502,7 @@ struct nvmet_alloc_ctrl_args {
 	struct nvmet_port	*port;
 	char			*subsysnqn;
 	char			*hostnqn;
+	uuid_t			*hostid;
 	const struct nvmet_fabrics_ops *ops;
 	struct device		*p2p_client;
 	u32			kato;
@@ -510,7 +511,7 @@ struct nvmet_alloc_ctrl_args {
 	u16			status;
 };
 
-struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args);
+struct nvmet_ctrl *nvmet_ctrl_create(struct nvmet_alloc_ctrl_args *args);
 struct nvmet_ctrl *nvmet_ctrl_find_get(const char *subsysnqn,
 				       const char *hostnqn, u16 cntlid,
 				       struct nvmet_req *req);

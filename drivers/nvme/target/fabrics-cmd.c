@@ -216,7 +216,6 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 		.p2p_client = req->p2p_client,
 		.kato = le32_to_cpu(c->kato),
 	};
-	u8 dhchap_status;
 
 	if (!nvmet_check_transfer_len(req, sizeof(struct nvmf_connect_data)))
 		return;
@@ -252,25 +251,11 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 
 	args.subsysnqn = d->subsysnqn;
 	args.hostnqn = d->hostnqn;
+	args.hostid = &d->hostid;
 
-	ctrl = nvmet_alloc_ctrl(&args);
+	ctrl = nvmet_ctrl_create(&args);
 	if (!ctrl)
 		goto out;
-
-	uuid_copy(&ctrl->hostid, &d->hostid);
-
-	dhchap_status = nvmet_setup_auth(ctrl);
-	if (dhchap_status) {
-		pr_err("Failed to setup authentication, dhchap status %u\n",
-		       dhchap_status);
-		nvmet_ctrl_put(ctrl);
-		if (dhchap_status == NVME_AUTH_DHCHAP_FAILURE_FAILED)
-			args.status =
-				NVME_SC_CONNECT_INVALID_HOST | NVME_STATUS_DNR;
-		else
-			args.status = NVME_SC_INTERNAL;
-		goto out;
-	}
 
 	args.status = nvmet_install_queue(ctrl, req);
 	if (args.status) {
@@ -278,11 +263,6 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 		goto out;
 	}
 
-	pr_info("creating %s controller %d for subsystem %s for NQN %s%s%s.\n",
-		nvmet_is_disc_subsys(ctrl->subsys) ? "discovery" : "nvm",
-		ctrl->cntlid, ctrl->subsys->subsysnqn, ctrl->hostnqn,
-		ctrl->pi_support ? " T10-PI is enabled" : "",
-		nvmet_has_auth(ctrl) ? " with DH-HMAC-CHAP" : "");
 	args.result = cpu_to_le32(nvmet_connect_result(ctrl));
 out:
 	kfree(d);

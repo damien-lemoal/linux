@@ -210,6 +210,14 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 	struct nvmf_connect_command *c = &req->cmd->connect;
 	struct nvmf_connect_data *d;
 	struct nvmet_ctrl *ctrl = NULL;
+	struct nvmet_alloc_ctrl_args ctrl_args = {
+		.port = req->port,
+		.ops = req->ops,
+		.p2p_client = req->p2p_client,
+		.kato = le32_to_cpu(c->kato),
+		.result = &req->cqe->result.u32,
+		.error_loc = &req->error_loc,
+	};
 	u16 status;
 	u8 dhchap_status;
 
@@ -244,8 +252,11 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 
 	d->subsysnqn[NVMF_NQN_FIELD_LEN - 1] = '\0';
 	d->hostnqn[NVMF_NQN_FIELD_LEN - 1] = '\0';
-	status = nvmet_alloc_ctrl(d->subsysnqn, d->hostnqn, req,
-				  le32_to_cpu(c->kato), &ctrl);
+
+	ctrl_args.subsysnqn = d->subsysnqn;
+	ctrl_args.hostnqn = d->hostnqn;
+
+	status = nvmet_alloc_ctrl(&ctrl_args, &ctrl);
 	if (status)
 		goto out;
 

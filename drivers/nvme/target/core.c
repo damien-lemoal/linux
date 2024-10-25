@@ -1345,15 +1345,15 @@ bool nvmet_host_allowed(struct nvmet_subsys *subsys, const char *hostnqn)
  * Note: ctrl->subsys->lock should be held when calling this function
  */
 static void nvmet_setup_p2p_ns_map(struct nvmet_ctrl *ctrl,
-		struct nvmet_req *req)
+		struct device *p2p_client)
 {
 	struct nvmet_ns *ns;
 	unsigned long idx;
 
-	if (!req->p2p_client)
+	if (!p2p_client)
 		return;
 
-	ctrl->p2p_client = get_device(req->p2p_client);
+	ctrl->p2p_client = get_device(p2p_client);
 
 	xa_for_each(&ctrl->subsys->namespaces, idx, ns)
 		nvmet_p2pmem_ns_add_p2p(ctrl, ns);
@@ -1382,32 +1382,33 @@ static void nvmet_fatal_error_handler(struct work_struct *work)
 	ctrl->ops->delete_ctrl(ctrl);
 }
 
-u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
-		struct nvmet_req *req, u32 kato, struct nvmet_ctrl **ctrlp)
+u16 nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args,
+		struct nvmet_ctrl **ctrlp)
 {
 	struct nvmet_subsys *subsys;
 	struct nvmet_ctrl *ctrl;
+	u32 kato = args->kato;
 	int ret;
 	u16 status;
 
 	status = NVME_SC_CONNECT_INVALID_PARAM | NVME_STATUS_DNR;
-	subsys = nvmet_find_get_subsys(req->port, subsysnqn);
+	subsys = nvmet_find_get_subsys(args->port, args->subsysnqn);
 	if (!subsys) {
 		pr_warn("connect request for invalid subsystem %s!\n",
-			subsysnqn);
-		req->cqe->result.u32 = IPO_IATTR_CONNECT_DATA(subsysnqn);
-		req->error_loc = offsetof(struct nvme_common_command, dptr);
+			args->subsysnqn);
+		*args->result = IPO_IATTR_CONNECT_DATA(subsysnqn);
+		*args->error_loc = offsetof(struct nvme_common_command, dptr);
 		goto out;
 	}
 
 	down_read(&nvmet_config_sem);
-	if (!nvmet_host_allowed(subsys, hostnqn)) {
+	if (!nvmet_host_allowed(subsys, args->hostnqn)) {
 		pr_info("connect by host %s for subsystem %s not allowed\n",
-			hostnqn, subsysnqn);
-		req->cqe->result.u32 = IPO_IATTR_CONNECT_DATA(hostnqn);
+			args->hostnqn, args->subsysnqn);
+		*args->result = IPO_IATTR_CONNECT_DATA(hostnqn);
 		up_read(&nvmet_config_sem);
 		status = NVME_SC_CONNECT_INVALID_HOST | NVME_STATUS_DNR;
-		req->error_loc = offsetof(struct nvme_common_command, dptr);
+		*args->error_loc = offsetof(struct nvme_common_command, dptr);
 		goto out_put_subsystem;
 	}
 	up_read(&nvmet_config_sem);
@@ -1418,8 +1419,8 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		goto out_put_subsystem;
 	mutex_init(&ctrl->lock);
 
-	ctrl->port = req->port;
-	ctrl->ops = req->ops;
+	ctrl->port = args->port;
+	ctrl->ops = args->ops;
 
 #ifdef CONFIG_NVME_TARGET_PASSTHRU
 	/* By default, set loop targets to clear IDS by default */
@@ -1433,8 +1434,8 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 	INIT_WORK(&ctrl->fatal_err_work, nvmet_fatal_error_handler);
 	INIT_DELAYED_WORK(&ctrl->ka_work, nvmet_keep_alive_timer);
 
-	memcpy(ctrl->subsysnqn, subsysnqn, NVMF_NQN_SIZE);
-	memcpy(ctrl->hostnqn, hostnqn, NVMF_NQN_SIZE);
+	memcpy(ctrl->subsysnqn, args->subsysnqn, NVMF_NQN_SIZE);
+	memcpy(ctrl->hostnqn, args->hostnqn, NVMF_NQN_SIZE);
 
 	kref_init(&ctrl->ref);
 	ctrl->subsys = subsys;
@@ -1479,7 +1480,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 
 	mutex_lock(&subsys->lock);
 	list_add_tail(&ctrl->subsys_entry, &subsys->ctrls);
-	nvmet_setup_p2p_ns_map(ctrl, req);
+	nvmet_setup_p2p_ns_map(ctrl, args->p2p_client);
 	nvmet_debugfs_ctrl_setup(ctrl);
 	mutex_unlock(&subsys->lock);
 

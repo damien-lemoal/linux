@@ -785,6 +785,7 @@ void nvmet_cq_setup(struct nvmet_ctrl *ctrl, struct nvmet_cq *cq,
 	cq->qid = qid;
 	cq->size = size;
 }
+EXPORT_SYMBOL_GPL(nvmet_cq_setup);
 
 void nvmet_sq_setup(struct nvmet_ctrl *ctrl, struct nvmet_sq *sq,
 		u16 qid, u16 size)
@@ -802,6 +803,55 @@ static void nvmet_confirm_sq(struct percpu_ref *ref)
 
 	complete(&sq->confirm_done);
 }
+
+static int nvmet_check_qid(struct nvmet_ctrl *ctrl, u16 qid)
+{
+	if (!ctrl->sqs)
+		return -ENODEV;
+
+	if (qid > ctrl->subsys->max_qid)
+		return -EINVAL;
+
+	if (ctrl->sqs[qid])
+		return -EEXIST;
+
+	return 0;
+}
+
+int nvmet_cq_create(struct nvmet_ctrl *ctrl, struct nvmet_cq *cq,
+		u16 qid, u16 size)
+{
+	int ret;
+
+	ret = nvmet_check_qid(ctrl, qid);
+	if (ret)
+		return ret;
+
+	nvmet_cq_setup(ctrl, cq, qid, size);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nvmet_cq_create);
+
+int nvmet_sq_create(struct nvmet_ctrl *ctrl, struct nvmet_sq *sq,
+		u16 qid, u16 size)
+{
+	int ret;
+
+	ret = nvmet_check_qid(ctrl, qid);
+	if (ret)
+		return ret;
+
+	ret = nvmet_sq_init(sq);
+	if (ret)
+		return ret;
+
+	nvmet_sq_setup(ctrl, sq, qid, size);
+	sq->ctrl = ctrl;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nvmet_sq_create);
 
 void nvmet_sq_destroy(struct nvmet_sq *sq)
 {

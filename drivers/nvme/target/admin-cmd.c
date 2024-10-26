@@ -24,6 +24,7 @@ u32 nvmet_get_log_page_len(struct nvme_command *cmd)
 
 	return len;
 }
+EXPORT_SYMBOL_GPL(nvmet_get_log_page_len);
 
 static u32 nvmet_feat_data_len(struct nvmet_req *req, u32 cdw10)
 {

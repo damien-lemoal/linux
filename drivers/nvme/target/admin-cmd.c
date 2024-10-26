@@ -455,11 +455,14 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	id->awun = 0;
 	id->awupf = 0;
 
-	id->sgls = cpu_to_le32(1 << 0);	/* we always support SGLs */
-	if (ctrl->ops->flags & NVMF_KEYED_SGLS)
-		id->sgls |= cpu_to_le32(1 << 2);
-	if (req->port->inline_data_size)
-		id->sgls |= cpu_to_le32(1 << 20);
+	/* We always support SGLs, except for PCI target controllers */
+	if (!nvmet_is_pci_ctrl(req->sq->ctrl)) {
+		id->sgls = cpu_to_le32(1 << 0);
+		if (ctrl->ops->flags & NVMF_KEYED_SGLS)
+			id->sgls |= cpu_to_le32(1 << 2);
+		if (req->port->inline_data_size)
+			id->sgls |= cpu_to_le32(1 << 20);
+	}
 
 	strscpy(id->subnqn, ctrl->subsys->subsysnqn, sizeof(id->subnqn));
 

@@ -1567,10 +1567,42 @@ out:
 	return status;
 }
 
+struct nvmet_ctrl *nvmet_ctrl_create(struct nvmet_port *port, char *subsysnqn,
+				     const struct nvmet_fabrics_ops *ops)
+{
+	struct nvmet_ctrl *ctrl = NULL;
+	u16 error_loc = NVMET_NO_ERROR_LOC;
+	u16 status;
+	u32 result;
+	struct nvmet_alloc_ctrl_args args = {
+		.port = port,
+		.subsysnqn = subsysnqn,
+		.hostnqn = "",
+		.ops = ops,
+		.result = &result,
+		.error_loc = &error_loc,
+	};
+
+	/* This is only allowed for the PCI transport. */
+	if (port->disc_addr.trtype != NVMF_TRTYPE_PCI ||
+	    ops->type != NVMF_TRTYPE_PCI) {
+		pr_warn("Invalid transport\n");
+		return NULL;
+	}
+
+	status = nvmet_ctrl_create_noqueue(&args, &ctrl);
+	if (status)
+		return NULL;
+
+	return ctrl;
+}
+EXPORT_SYMBOL_GPL(nvmet_ctrl_create);
+
 void nvmet_ctrl_put(struct nvmet_ctrl *ctrl)
 {
 	kref_put(&ctrl->ref, nvmet_ctrl_free);
 }
+EXPORT_SYMBOL_GPL(nvmet_ctrl_put);
 
 void nvmet_ctrl_fatal_error(struct nvmet_ctrl *ctrl)
 {

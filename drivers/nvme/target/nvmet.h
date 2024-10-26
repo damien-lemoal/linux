@@ -512,6 +512,8 @@ struct nvmet_alloc_ctrl_args {
 
 u16 nvmet_ctrl_create_noqueue(struct nvmet_alloc_ctrl_args *args,
 			      struct nvmet_ctrl **ctrl);
+struct nvmet_ctrl *nvmet_ctrl_create(struct nvmet_port *port, char *subsysnqn,
+				     const struct nvmet_fabrics_ops *ops);
 struct nvmet_ctrl *nvmet_ctrl_find_get(const char *subsysnqn,
 				       const char *hostnqn, u16 cntlid,
 				       struct nvmet_req *req);

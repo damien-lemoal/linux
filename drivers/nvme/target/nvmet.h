@@ -353,6 +353,8 @@ struct nvmet_fabrics_ops {
 	void (*queue_response)(struct nvmet_req *req);
 	int (*add_port)(struct nvmet_port *port);
 	void (*remove_port)(struct nvmet_port *port);
+	int (*enable_ctrl)(struct nvmet_ctrl *ctrl);
+	void (*disable_ctrl)(struct nvmet_ctrl *ctrl);
 	void (*delete_ctrl)(struct nvmet_ctrl *ctrl);
 	void (*disc_traddr)(struct nvmet_req *req,
 			struct nvmet_port *port, char *traddr);

@@ -1197,6 +1197,12 @@ static void nvmet_start_ctrl(struct nvmet_ctrl *ctrl)
 		return;
 	}
 
+	/* Notify the target driver */
+	if (ctrl->ops->enable_ctrl) {
+		if (ctrl->ops->enable_ctrl(ctrl))
+			return;
+	}
+
 	ctrl->csts = NVME_CSTS_RDY;
 
 	/*
@@ -1212,6 +1218,10 @@ static void nvmet_start_ctrl(struct nvmet_ctrl *ctrl)
 static void nvmet_clear_ctrl(struct nvmet_ctrl *ctrl)
 {
 	lockdep_assert_held(&ctrl->lock);
+
+	/* Notify the target driver */
+	if (ctrl->ops->disable_ctrl)
+		ctrl->ops->disable_ctrl(ctrl);
 
 	/* XXX: tear down queues? */
 	ctrl->csts &= ~NVME_CSTS_RDY;

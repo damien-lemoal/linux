@@ -661,9 +661,14 @@ static inline struct nvmet_subsys *nvmet_req_subsys(struct nvmet_req *req)
 	return req->sq->ctrl->subsys;
 }
 
+static inline bool nvmet_is_nvm_subsys(struct nvmet_subsys *subsys)
+{
+	return subsys->type == NVME_NQN_NVME;
+}
+
 static inline bool nvmet_is_disc_subsys(struct nvmet_subsys *subsys)
 {
-    return subsys->type != NVME_NQN_NVME;
+	return !nvmet_is_nvm_subsys(subsys);
 }
 
 static inline bool nvmet_is_pci_ctrl(struct nvmet_ctrl *ctrl)

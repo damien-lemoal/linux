@@ -12,6 +12,12 @@
 #include <linux/unaligned.h>
 #include "nvmet.h"
 
+static inline bool nvmet_is_pci_nvm_subsys(struct nvmet_req *req)
+{
+	return nvmet_is_pci_req(req) &&
+		nvmet_is_nvm_subsys(nvmet_req_subsys(req));
+}
+
 u32 nvmet_get_log_page_len(struct nvme_command *cmd)
 {
 	u32 len = le16_to_cpu(cmd->get_log_page.numdu);
@@ -163,8 +169,18 @@ out:
 	nvmet_req_complete(req, status);
 }
 
-static void nvmet_get_cmd_effects_nvm(struct nvme_effects_log *log)
+static void nvmet_get_cmd_effects_nvm(struct nvmet_req *req,
+				      struct nvme_effects_log *log)
 {
+	/* For a PCI target controller, advertize support for the . */
+	if (nvmet_is_pci_nvm_subsys(req)) {
+		log->acs[nvme_admin_delete_sq] =
+		log->acs[nvme_admin_create_sq] =
+		log->acs[nvme_admin_delete_cq] =
+		log->acs[nvme_admin_create_cq] =
+			cpu_to_le32(NVME_CMD_EFFECTS_CSUPP);
+	}
+
 	log->acs[nvme_admin_get_log_page] =
 	log->acs[nvme_admin_identify] =
 	log->acs[nvme_admin_abort_cmd] =
@@ -205,14 +221,14 @@ static void nvmet_execute_get_log_cmd_effects_ns(struct nvmet_req *req)
 
 	switch (req->cmd->get_log_page.csi) {
 	case NVME_CSI_NVM:
-		nvmet_get_cmd_effects_nvm(log);
+		nvmet_get_cmd_effects_nvm(req, log);
 		break;
 	case NVME_CSI_ZNS:
 		if (!IS_ENABLED(CONFIG_BLK_DEV_ZONED)) {
 			status = NVME_SC_INVALID_IO_CMD_SET;
 			goto free;
 		}
-		nvmet_get_cmd_effects_nvm(log);
+		nvmet_get_cmd_effects_nvm(req, log);
 		nvmet_get_cmd_effects_zns(log);
 		break;
 	default:

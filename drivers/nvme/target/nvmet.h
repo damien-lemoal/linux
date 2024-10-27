@@ -364,6 +364,7 @@ struct nvmet_fabrics_ops {
 	void (*discovery_chg)(struct nvmet_port *port);
 	u8 (*get_mdts)(const struct nvmet_ctrl *ctrl);
 	u16 (*get_max_queue_size)(const struct nvmet_ctrl *ctrl);
+	__le16 (*get_vid)(const struct nvmet_ctrl *ctrl, __le16 *ssvid);
 };
 
 #define NVMET_MAX_INLINE_BIOVEC	8

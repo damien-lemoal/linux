@@ -524,6 +524,10 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	if (ret)
 		goto err_remove_edma;
 
+	ret = dwc_pcie_rasdes_debugfs_init(pci);
+	if (ret)
+		goto err_remove_edma;
+
 	if (!dw_pcie_link_up(pci)) {
 		ret = dw_pcie_start_link(pci);
 		if (ret)
@@ -576,6 +580,8 @@ void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 	pci_remove_root_bus(pp->bridge->bus);
 
 	dw_pcie_stop_link(pci);
+
+	dwc_pcie_rasdes_debugfs_deinit(pci);
 
 	dw_pcie_edma_remove(pci);
 

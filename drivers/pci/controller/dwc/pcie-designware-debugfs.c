@@ -465,7 +465,7 @@ static const struct file_operations dwc_pcie_counter_value_ops = {
 	.read = counter_value_read,
 };
 
-void dwc_pcie_rasdes_debugfs_deinit(struct dw_pcie *pci)
+static void dwc_pcie_rasdes_debugfs_deinit(struct dw_pcie *pci)
 {
 	struct dwc_pcie_rasdes_info *rinfo = pci->rasdes_info;
 
@@ -473,13 +473,12 @@ void dwc_pcie_rasdes_debugfs_deinit(struct dw_pcie *pci)
 	mutex_destroy(&rinfo->reg_lock);
 }
 
-int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci)
+static int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci, struct dentry *dir)
 {
-	struct dentry *dir, *rasdes_debug, *rasdes_err_inj, *rasdes_event_counter, *rasdes_events;
+	struct dentry *rasdes_debug, *rasdes_err_inj, *rasdes_event_counter, *rasdes_events;
 	struct dwc_pcie_rasdes_info *rasdes_info;
 	struct dwc_pcie_rasdes_priv *priv_tmp;
 	const struct dwc_pcie_vendor_id *vid;
-	char dirname[DWC_DEBUGFS_BUF_MAX];
 	struct device *dev = pci->dev;
 	int ras_cap, i, ret;
 
@@ -497,12 +496,6 @@ int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci)
 	rasdes_info = devm_kzalloc(dev, sizeof(*rasdes_info), GFP_KERNEL);
 	if (!rasdes_info)
 		return -ENOMEM;
-
-	/* Create main directory for each platform driver */
-	snprintf(dirname, DWC_DEBUGFS_BUF_MAX, "dwc_pcie_%s", dev_name(dev));
-	dir = debugfs_create_dir(dirname, NULL);
-	if (IS_ERR(dir))
-		return PTR_ERR(dir);
 
 	/* Create subdirectories for Debug, Error injection, Statistics */
 	rasdes_debug = debugfs_create_dir("rasdes_debug", dir);
@@ -558,4 +551,60 @@ int dwc_pcie_rasdes_debugfs_init(struct dw_pcie *pci)
 err_deinit:
 	dwc_pcie_rasdes_debugfs_deinit(pci);
 	return ret;
+}
+
+static int dwc_pcie_ltssm_status_show(struct seq_file *s, void *v)
+{
+	struct dw_pcie *pci = s->private;
+	enum dw_pcie_ltssm val;
+
+	val = dw_pcie_get_ltssm(pci);
+	seq_printf(s, "%s (0x%02x)\n", dw_ltssm_sts_string(val), val);
+
+	return 0;
+}
+
+static int dwc_pcie_ltssm_status_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dwc_pcie_ltssm_status_show, inode->i_private);
+}
+
+static const struct file_operations dwc_pcie_ltssm_status_ops = {
+	.open = dwc_pcie_ltssm_status_open,
+	.read = seq_read,
+};
+
+static void dwc_pcie_ltssm_debugfs_init(struct dw_pcie *pci, struct dentry *dir)
+{
+	debugfs_create_file("ltssm_status", 0444, dir, pci,
+			    &dwc_pcie_ltssm_status_ops);
+}
+
+void dwc_pcie_debugfs_deinit(struct dw_pcie *pci)
+{
+	dwc_pcie_rasdes_debugfs_deinit(pci);
+	debugfs_remove_recursive(pci->debugfs);
+}
+
+int dwc_pcie_debugfs_init(struct dw_pcie *pci)
+{
+	char dirname[DWC_DEBUGFS_BUF_MAX];
+	struct device *dev = pci->dev;
+	struct dentry *dir;
+	int ret;
+
+	/* Create main directory for each platform driver */
+	snprintf(dirname, DWC_DEBUGFS_BUF_MAX, "dwc_pcie_%s", dev_name(dev));
+	dir = debugfs_create_dir(dirname, NULL);
+	if (IS_ERR(dir))
+		return PTR_ERR(dir);
+
+	pci->debugfs = dir;
+	ret = dwc_pcie_rasdes_debugfs_init(pci, dir);
+	if (ret)
+		dev_dbg(dev, "rasdes debugfs init failed\n");
+
+	dwc_pcie_ltssm_debugfs_init(pci, dir);
+
+	return 0;
 }

@@ -142,3 +142,9 @@ Description:	(RW) Some lanes in the event list are lane specific events. These i
 		events 1) - 11) and 34) - 35).
 		Write lane number for which counter needs to be enabled/disabled/dumped.
 		Read will return the current selected lane number. Lane0 is selected by default.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/ltssm_status
+Date:		February 2025
+Contact:	Hans Zhang <18255117159@163.com>
+Description:	(RO) Read will return the current value of the PCIe link status raw value and
+		string status.

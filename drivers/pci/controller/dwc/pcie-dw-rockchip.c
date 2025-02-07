@@ -24,6 +24,7 @@
 
 #include "../../pci.h"
 #include "pcie-designware.h"
+#include "../../pci.h"
 
 /*
  * The upper 16 bits of PCIE_CLIENT_CONFIG are a write
@@ -41,6 +42,7 @@
 #define  PCIE_CLIENT_EP_MODE		HIWORD_UPDATE(0xf0, 0x0)
 #define  PCIE_CLIENT_ENABLE_LTSSM	HIWORD_UPDATE_BIT(0xc)
 #define  PCIE_CLIENT_DISABLE_LTSSM	HIWORD_UPDATE(0x0c, 0x8)
+#define  PCIE_CLIENT_ENABLE_SRIS	HIWORD_UPDATE_BIT(BIT(11))
 
 /* Interrupt Status Register Related to Legacy Interrupt */
 #define PCIE_CLIENT_INTR_STATUS_LEGACY	0x8
@@ -524,8 +526,14 @@ static int rockchip_pcie_configure_rc(struct platform_device *pdev,
 	val = HIWORD_UPDATE_BIT(PCIE_LTSSM_ENABLE_ENHANCE);
 	rockchip_pcie_writel_apb(rockchip, val, PCIE_CLIENT_HOT_RESET_CTRL);
 
-	rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_RC_MODE,
-				 PCIE_CLIENT_GENERAL_CON);
+	/*
+	 * TODO: Add a proper DT property for SRIS. For now (since SRIS requires
+	 * Gen3 PHY), enable SRIS unconditionally for the Gen3 PHY.
+	 */
+	val = PCIE_CLIENT_RC_MODE;
+	if (of_pci_get_max_link_speed(dev->of_node) == 3)
+		val |= PCIE_CLIENT_ENABLE_SRIS;
+	rockchip_pcie_writel_apb(rockchip, val, PCIE_CLIENT_GENERAL_CON);
 
 	pp = &rockchip->pci.pp;
 	pp->ops = &rockchip_pcie_host_ops;
@@ -570,8 +578,14 @@ static int rockchip_pcie_configure_ep(struct platform_device *pdev,
 	val = HIWORD_UPDATE_BIT(PCIE_LTSSM_ENABLE_ENHANCE);
 	rockchip_pcie_writel_apb(rockchip, val, PCIE_CLIENT_HOT_RESET_CTRL);
 
-	rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_EP_MODE,
-				 PCIE_CLIENT_GENERAL_CON);
+	/*
+	 * TODO: Add a proper DT property for SRIS. For now, enable SRIS mode
+	 * unconditionally for the Gen3 PHY.
+	 */
+	val = PCIE_CLIENT_EP_MODE;
+	if (of_pci_get_max_link_speed(dev->of_node) == 3)
+		val |= PCIE_CLIENT_ENABLE_SRIS;
+	rockchip_pcie_writel_apb(rockchip, val, PCIE_CLIENT_GENERAL_CON);
 
 	rockchip->pci.ep.ops = &rockchip_pcie_ep_ops;
 	rockchip->pci.ep.page_size = SZ_64K;

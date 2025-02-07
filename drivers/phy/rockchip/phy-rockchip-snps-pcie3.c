@@ -44,6 +44,7 @@
 #define RK3588_BIFURCATION_LANE_0_1		BIT(0)
 #define RK3588_BIFURCATION_LANE_2_3		BIT(1)
 #define RK3588_LANE_AGGREGATION		BIT(2)
+#define RK3588_SRIS_MODE_EN			((BIT(6) << 16) |  BIT(6))
 #define RK3588_RX_CMN_REFCLK_MODE_EN		((BIT(7) << 16) |  BIT(7))
 #define RK3588_RX_CMN_REFCLK_MODE_DIS		(BIT(7) << 16)
 #define RK3588_PCIE1LN_SEL_EN			(GENMASK(1, 0) << 16)
@@ -144,18 +145,22 @@ static int rockchip_p3phy_rk3588_init(struct rockchip_p3phy_priv *priv)
 	u8 mode = RK3588_LANE_AGGREGATION; /* default */
 	int ret;
 
+	/*
+	 * TODO: Add a proper DT property for SRIS. For now (since SRIS requires
+	 * refclk_mode == 0), enable SRIS unconditionally when refclk_mode == 0.
+	 */
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY0_LN0_CON1,
 		     priv->rx_cmn_refclk_mode[0] ? RK3588_RX_CMN_REFCLK_MODE_EN :
-		     RK3588_RX_CMN_REFCLK_MODE_DIS);
+		     (RK3588_RX_CMN_REFCLK_MODE_DIS | RK3588_SRIS_MODE_EN));
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY0_LN1_CON1,
 		     priv->rx_cmn_refclk_mode[1] ? RK3588_RX_CMN_REFCLK_MODE_EN :
-		     RK3588_RX_CMN_REFCLK_MODE_DIS);
+		     (RK3588_RX_CMN_REFCLK_MODE_DIS | RK3588_SRIS_MODE_EN));
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY1_LN0_CON1,
 		     priv->rx_cmn_refclk_mode[2] ? RK3588_RX_CMN_REFCLK_MODE_EN :
-		     RK3588_RX_CMN_REFCLK_MODE_DIS);
+		     (RK3588_RX_CMN_REFCLK_MODE_DIS | RK3588_SRIS_MODE_EN));
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_PHY1_LN1_CON1,
 		     priv->rx_cmn_refclk_mode[3] ? RK3588_RX_CMN_REFCLK_MODE_EN :
-		     RK3588_RX_CMN_REFCLK_MODE_DIS);
+		     (RK3588_RX_CMN_REFCLK_MODE_DIS | RK3588_SRIS_MODE_EN));
 
 	/* Deassert PCIe PMA output clamp mode */
 	regmap_write(priv->phy_grf, RK3588_PCIE3PHY_GRF_CMN_CON0, BIT(8) | BIT(24));

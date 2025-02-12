@@ -242,6 +242,53 @@ static const struct dw_pcie_host_ops rockchip_pcie_host_ops = {
 	.init = rockchip_pcie_host_init,
 };
 
+static unsigned int rockchip_dw_pcie_ep_find_ext_capability(struct dw_pcie *pci, int cap)
+{
+	u32 header;
+	int pos = PCI_CFG_SPACE_SIZE;
+
+	while (pos) {
+		header = dw_pcie_readl_dbi(pci, pos);
+		if (PCI_EXT_CAP_ID(header) == cap)
+			return pos;
+
+		pos = PCI_EXT_CAP_NEXT(header);
+		if (!pos)
+			break;
+	}
+
+	return 0;
+}
+
+static void rockchip_pcie_ep_pre_init(struct dw_pcie_ep *ep)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	unsigned int spcie_cap_offset, next_cap_offset;
+	u32 spcie_cap_header, next_cap_header;
+
+	spcie_cap_offset = rockchip_dw_pcie_ep_find_ext_capability(pci, PCI_EXT_CAP_ID_SECPCI);
+
+	if (!spcie_cap_offset)
+		return;
+
+	spcie_cap_header = dw_pcie_readl_dbi(pci, spcie_cap_offset);
+	next_cap_offset = PCI_EXT_CAP_NEXT(spcie_cap_header);
+
+	next_cap_header = dw_pcie_readl_dbi(pci, next_cap_offset);
+	if (PCI_EXT_CAP_ID(next_cap_header) != PCI_EXT_CAP_ID_ATS)
+		return;
+
+	/* clear next ptr */
+	spcie_cap_header &= ~GENMASK(31, 20);
+
+	/* set next ptr to next ptr of ATS_CAP */
+	spcie_cap_header |= next_cap_header & GENMASK(31, 20);
+
+	dw_pcie_dbi_ro_wr_en(pci);
+	dw_pcie_writel_dbi(pci, spcie_cap_offset, spcie_cap_header);
+	dw_pcie_dbi_ro_wr_dis(pci);
+}
+
 static void rockchip_pcie_ep_init(struct dw_pcie_ep *ep)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
@@ -314,6 +361,7 @@ rockchip_pcie_get_features(struct dw_pcie_ep *ep)
 
 static const struct dw_pcie_ep_ops rockchip_pcie_ep_ops = {
 	.init = rockchip_pcie_ep_init,
+	.pre_init = rockchip_pcie_ep_pre_init,
 	.raise_irq = rockchip_pcie_raise_irq,
 	.get_features = rockchip_pcie_get_features,
 };

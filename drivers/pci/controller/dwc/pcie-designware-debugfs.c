@@ -49,8 +49,10 @@ struct dwc_pcie_vendor_id {
 	u16 vsec_rasdes_cap_id;
 };
 
+#define PCI_VENDOR_ID_ROCKCHIP			0x1d87
 static const struct dwc_pcie_vendor_id dwc_pcie_vendor_ids[] = {
 	{PCI_VENDOR_ID_SAMSUNG,	0x2},
+	{PCI_VENDOR_ID_ROCKCHIP,	0x2},
 	{} /* terminator */
 };
 

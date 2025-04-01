@@ -1764,6 +1764,8 @@ static void nvmet_pci_epf_cq_work(struct work_struct *work)
 
 		/* Post the IOD completion entry. */
 		cqe = &iod->cqe;
+		cqe->sq_id = cpu_to_le16(iod->sq->qid);
+		cqe->command_id = iod->cmd.common.command_id;
 		cqe->status = cpu_to_le16((iod->status << 1) | cq->phase);
 
 		dev_dbg(ctrl->dev,
